@@ -263,14 +263,14 @@
         <input type="range" min="10" max="200" class="gh-range" x-model.number="activeText.size" @input="renderCanvas()" :disabled="!hasImage" />
       </div>
       <div class="mb-3">
-        <span class="panel-label">Text Colour</span>
+        <span class="panel-label">Text Color</span>
         <div class="flex items-center gap-2">
           <input type="color" x-model="activeText.color" @input="renderCanvas()" class="w-8 h-8 rounded cursor-pointer" style="background:transparent;border:none;padding:0" :disabled="!hasImage" />
           <input type="text" class="gh-input" x-model="activeText.color" @input="renderCanvas()" :disabled="!hasImage" />
         </div>
       </div>
       <div class="mb-3">
-        <span class="panel-label">Stroke Colour</span>
+        <span class="panel-label">Stroke Color</span>
         <div class="flex items-center gap-2">
           <input type="color" x-model="activeText.strokeColor" @input="renderCanvas()" class="w-8 h-8 rounded cursor-pointer" style="background:transparent;border:none;padding:0" :disabled="!hasImage" />
           <input type="text" class="gh-input" x-model="activeText.strokeColor" @input="renderCanvas()" :disabled="!hasImage" />
@@ -568,7 +568,7 @@ function memeEditor() {
       ctx.filter = 'none';
       this.drawMemeText(ctx, W, H);
       this.updateInfo();
-      this.saveToStorage();
+      this.debouncedSave();
     },
 
     buildFilter() {
@@ -672,7 +672,7 @@ function memeEditor() {
       const y      = (e.clientY - rect.top)   / scale;
       for (let i = this.stickers.length - 1; i >= 0; i--) {
         const s = this.stickers[i];
-        if (Math.abs(x - s.x) < s.size && Math.abs(y - s.y) < s.size) {
+        if (Math.abs(x - s.x) < s.size / 2 && Math.abs(y - s.y) < s.size / 2) {
           this.drag = { active:true, startX:x-s.x, startY:y-s.y, stickerIdx:i };
           return;
         }
@@ -713,6 +713,13 @@ function memeEditor() {
           this.showToast('Copied to clipboard!');
         }, 'image/png');
       } catch(e) { this.showToast('Copy not supported — use Download instead'); }
+    },
+
+    _saveTimer: null,
+
+    debouncedSave() {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => this.saveToStorage(), 1000);
     },
 
     saveToStorage() {
