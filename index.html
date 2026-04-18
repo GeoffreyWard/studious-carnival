@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MemeForge &mdash; In-Browser Meme Editor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gh: {
+              canvas: '#0d1117', surface: '#161b22', overlay: '#21262d',
+              border: '#30363d', text: '#c9d1d9', muted: '#8b949e',
+              accent: '#58a6ff', green: '#3fb950', orange: '#d29922', red: '#f85149',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#0d1117}
+    ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:#484f58}
+    [x-cloak]{display:none!important}
+    .checkerboard{background-color:#21262d;background-image:linear-gradient(45deg,#30363d 25%,transparent 25%),linear-gradient(-45deg,#30363d 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#30363d 75%),linear-gradient(-45deg,transparent 75%,#30363d 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0}
+    .tool-btn{display:flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;border-radius:.375rem;color:#8b949e;transition:all .15s;border:1px solid transparent}
+    .tool-btn:hover{background:#21262d;color:#c9d1d9}
+    .tool-btn.active{background:#21262d;color:#58a6ff;border-color:#30363d}
+    .panel-label{display:block;font-size:.6875rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8b949e;margin-bottom:.375rem}
+    .gh-input{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:.375rem;color:#c9d1d9;padding:.375rem .5rem;font-size:.8125rem;outline:none;transition:border-color .15s}
+    .gh-input:focus{border-color:#58a6ff}
+    .gh-input:disabled{opacity:.4;cursor:not-allowed}
+    .gh-select{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:.375rem;color:#c9d1d9;padding:.375rem .5rem;font-size:.8125rem;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .5rem center}
+    .gh-select:focus{border-color:#58a6ff}
+    .gh-range{width:100%;height:4px;appearance:none;background:#30363d;border-radius:2px;outline:none;cursor:pointer}
+    .gh-range::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:#58a6ff;cursor:pointer;transition:transform .1s}
+    .gh-range::-webkit-slider-thumb:hover{transform:scale(1.2)}
+    .gh-btn{display:inline-flex;align-items:center;gap:.375rem;padding:.375rem .75rem;border-radius:.375rem;font-size:.8125rem;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid}
+    .gh-btn-primary{background:#238636;border-color:#2ea043;color:#fff}
+    .gh-btn-primary:hover{background:#2ea043}
+    .gh-btn-secondary{background:#21262d;border-color:#30363d;color:#c9d1d9}
+    .gh-btn-secondary:hover{background:#30363d;border-color:#484f58}
+    .gh-btn-danger{background:transparent;border-color:#f85149;color:#f85149}
+    .gh-btn-danger:hover{background:#f851491a}
+    .gh-btn-accent{background:#1f6feb;border-color:#388bfd;color:#fff}
+    .gh-btn-accent:hover{background:#388bfd}
+    .tab-btn{padding:.375rem .75rem;font-size:.75rem;font-weight:500;color:#8b949e;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .tab-btn.active{color:#c9d1d9;border-bottom-color:#58a6ff}
+    .tab-btn:hover:not(.active){color:#c9d1d9}
+    .toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:#21262d;border:1px solid #30363d;border-radius:.5rem;padding:.75rem 1rem;color:#c9d1d9;font-size:.8125rem;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:slideIn .2s ease}
+    @keyframes slideIn{from{transform:translateY(1rem);opacity:0}to{transform:translateY(0);opacity:1}}
+    canvas{display:block}
+  </style>
+</head>
+<body class="h-full bg-gh-canvas text-gh-text overflow-hidden select-none"
+  style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+  x-data="memeEditor()" x-init="init()"
+  @dragover.prevent @drop.prevent="handleFileDrop($event)">
+
+<!-- TOP BAR -->
+<header class="flex items-center gap-3 px-4 h-11 bg-gh-surface border-b border-gh-border" style="position:relative;z-index:20">
+  <div class="flex items-center gap-2 mr-2">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <rect width="22" height="22" rx="5" fill="#238636"/>
+      <path d="M6 16l3-8 3 4 2-3 2 7" stroke="white" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span class="font-semibold text-sm">MemeForge</span>
+    <span class="text-gh-muted text-xs">v1.0</span>
+  </div>
+  <div class="h-5 w-px bg-gh-border"></div>
+  <label class="gh-btn gh-btn-secondary text-xs cursor-pointer">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+    Open Image
+    <input type="file" accept="image/*" class="sr-only" @change="loadImageFile($event)" />
+  </label>
+  <button class="gh-btn gh-btn-secondary text-xs" @click="pasteFromClipboard()" title="Paste (Ctrl+V)">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.75 1a.75.75 0 00-.75.75v3c0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75v-3a.75.75 0 00-.75-.75h-4.5zm.75 3V2.5h3V4h-3zm-2.874-.467a.75.75 0 00-.752-1.298A1.75 1.75 0 002 3.75v9.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0014 13.25v-9.5a1.75 1.75 0 00-1.124-1.617.75.75 0 10-.752 1.298.25.25 0 01.126.219v9.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-9.5a.25.25 0 01.126-.219z"/></svg>
+    Paste
+  </button>
+  <div class="flex-1"></div>
+  <div x-show="hasImage" class="text-xs text-gh-muted" x-text="imgInfo"></div>
+  <button class="gh-btn gh-btn-primary text-xs"
+    :class="{'opacity-40 cursor-not-allowed':!hasImage}"
+    @click="downloadImage()" :disabled="!hasImage">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 10.78a.75.75 0 001.06 0l3.75-3.75a.75.75 0 00-1.06-1.06L8.75 8.44V1.75a.75.75 0 00-1.5 0v6.69L4.78 5.97a.75.75 0 00-1.06 1.06l3.75 3.75zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/></svg>
+    Export
+  </button>
+</header>
+
+<!-- MAIN LAYOUT -->
+<div class="flex" style="height:calc(100vh - 2.75rem)">
+
+<!-- LEFT TOOLBAR -->
+<aside class="flex flex-col items-center gap-1 py-3 px-1.5 bg-gh-surface border-r border-gh-border w-12 shrink-0">
+  <button class="tool-btn" :class="{active:tool==='select'}" @click="tool='select'" title="Select (V)">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1l12 6-7 1-3 7z"/></svg>
+  </button>
+  <button class="tool-btn" :class="{active:tool==='text'}" @click="tool='text';rightTab='text'" title="Text (T)">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A.5.5 0 012.5 2h11a.5.5 0 010 1H8.75v10.5a.5.5 0 01-1 0V3H2.5A.5.5 0 012 2.5z"/></svg>
+  </button>
+  <button class="tool-btn" :class="{active:tool==='sticker'}" @click="tool='sticker';showStickerPanel=true" title="Stickers">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zm4-1a1 1 0 112 0 1 1 0 01-2 0zm4 0a1 1 0 112 0 1 1 0 01-2 0zm-5.2 3.6a.5.5 0 01.7-.1 5 5 0 006 0 .5.5 0 01.6.8 6 6 0 01-7.2 0 .5.5 0 01-.1-.7z"/></svg>
+  </button>
+  <div class="w-6 h-px bg-gh-border my-1"></div>
+  <button class="tool-btn" @click="flipHorizontal()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Flip H">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.25 3.56L4.56 1.22A.75.75 0 003.5 1.75v12.5a.75.75 0 001.06.53l2.69-2.34V3.56zm1.5 0v8.88l2.69 2.34a.75.75 0 001.06-.53V1.75a.75.75 0 00-1.06-.53L8.75 3.56z"/></svg>
+  </button>
+  <button class="tool-btn" @click="flipVertical()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Flip V">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M12.44 7.25L14.78 4.56A.75.75 0 0014.25 3.5H1.75a.75.75 0 00-.53 1.06l2.34 2.69h8.88zm0 1.5H3.56L1.22 11.44a.75.75 0 00.53 1.06h12.5a.75.75 0 00.53-1.06l-2.34-2.69z"/></svg>
+  </button>
+  <button class="tool-btn" @click="rotateImage(-90)" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Rotate -90">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 100 10A5 5 0 008 3zM1 8a7 7 0 0111.95-4.95L14.5 1.5v4h-4l1.73-1.73A5.5 5.5 0 102.5 8H1z"/></svg>
+  </button>
+  <button class="tool-btn" @click="rotateImage(90)" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Rotate +90">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 13a5 5 0 100-10A5 5 0 008 13zm7-5a7 7 0 01-11.95 4.95L1.5 14.5v-4h4l-1.73 1.73A5.5 5.5 0 1013.5 8H15z"/></svg>
+  </button>
+  <div class="flex-1"></div>
+  <button class="tool-btn" @click="resetAll()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Clear">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+  </button>
+</aside>
+
+<!-- CANVAS AREA -->
+<main class="flex-1 flex flex-col items-center justify-center overflow-auto checkerboard relative">
+  <!-- Drop hint -->
+  <div x-show="!hasImage" class="flex flex-col items-center gap-4 pointer-events-none">
+    <div class="w-24 h-24 rounded-2xl bg-gh-overlay border-2 border-dashed border-gh-border flex items-center justify-center">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="1.5">
+        <path d="M4 16l4-4 4 4 4-8 4 8" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+      </svg>
+    </div>
+    <div class="text-center">
+      <p class="text-gh-text font-medium">Drop an image here</p>
+      <p class="text-gh-muted text-sm mt-1">or paste with <kbd style="padding:.15rem .4rem;font-size:.75rem;border-radius:.25rem;background:#21262d;border:1px solid #30363d;font-family:monospace">Ctrl+V</kbd></p>
+    </div>
+    <label class="gh-btn gh-btn-accent text-sm cursor-pointer pointer-events-auto">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+      Choose Image
+      <input type="file" accept="image/*" class="sr-only" @change="loadImageFile($event)" />
+    </label>
+  </div>
+
+  <!-- Canvas -->
+  <div x-show="hasImage" class="relative" :style="`transform:scale(${zoom/100});transform-origin:center center`">
+    <canvas id="mainCanvas" class="shadow-2xl"
+      @mousedown="onCanvasMouseDown($event)"
+      @mousemove="onCanvasMouseMove($event)"
+      @mouseup="onCanvasMouseUp($event)"
+      @mouseleave="onCanvasMouseUp($event)">
+    </canvas>
+  </div>
+
+  <!-- Zoom bar -->
+  <div x-show="hasImage" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gh-surface border border-gh-border rounded-full px-3 py-1.5 shadow-lg" style="transform:translateX(-50%)">
+    <button class="text-gh-muted hover:text-gh-text w-5 h-5 flex items-center justify-center" @click="zoom=Math.max(10,zoom-10)" style="font-size:1rem;line-height:1">&minus;</button>
+    <input type="range" min="10" max="300" step="5" x-model.number="zoom" class="gh-range w-24" />
+    <button class="text-gh-muted hover:text-gh-text w-5 h-5 flex items-center justify-center" @click="zoom=Math.min(300,zoom+10)" style="font-size:1rem;line-height:1">+</button>
+    <span class="text-xs text-gh-muted font-mono w-10 text-center" x-text="zoom+'%'" style="font-family:monospace"></span>
+    <div class="w-px h-3 bg-gh-border"></div>
+    <button class="text-xs text-gh-muted hover:text-gh-text" @click="zoom=100">Fit</button>
+  </div>
+</main>
+
+<!-- RIGHT PANEL -->
+<aside class="w-64 shrink-0 bg-gh-surface border-l border-gh-border flex flex-col overflow-hidden">
+  <div class="flex border-b border-gh-border px-2 shrink-0">
+    <button class="tab-btn" :class="{active:rightTab==='image'}" @click="rightTab='image'">Image</button>
+    <button class="tab-btn" :class="{active:rightTab==='text'}" @click="rightTab='text'">Text</button>
+    <button class="tab-btn" :class="{active:rightTab==='filters'}" @click="rightTab='filters'">Filters</button>
+    <button class="tab-btn" :class="{active:rightTab==='export'}" @click="rightTab='export'">Export</button>
+  </div>
+
+  <div class="flex-1 overflow-y-auto p-3">
+
+    <!-- IMAGE TAB -->
+    <div x-show="rightTab==='image'" x-cloak>
+      <div class="mb-4">
+        <span class="panel-label">Dimensions</span>
+        <div class="flex gap-2 items-end">
+          <div class="flex-1">
+            <label class="text-xs text-gh-muted mb-1 block">W (px)</label>
+            <input type="number" class="gh-input" x-model.number="resize.w" @change="onResizeInput('w')" :disabled="!hasImage" min="1" />
+          </div>
+          <button class="mb-1 text-gh-muted hover:text-gh-accent flex-shrink-0" @click="resize.lock=!resize.lock" :title="resize.lock?'Unlock':'Lock aspect ratio'">
+            <template x-if="resize.lock">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4 7V5a4 4 0 018 0v2h.25c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25H3.75C3.06 15 2.5 14.44 2.5 13.75v-5.5C2.5 7.56 3.06 7 3.75 7H4zm1.5 0h5V5a2.5 2.5 0 00-5 0v2z"/></svg>
+            </template>
+            <template x-if="!resize.lock">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3.5 3.5 0 013.5 3.5V7h.25c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25H3.25C2.56 15 2 14.44 2 13.75v-5.5C2 7.56 2.56 7 3.25 7H10V4.5a2 2 0 10-4 0V5H4.5V4.5A3.5 3.5 0 018 1z"/></svg>
+            </template>
+          </button>
+          <div class="flex-1">
+            <label class="text-xs text-gh-muted mb-1 block">H (px)</label>
+            <input type="number" class="gh-input" x-model.number="resize.h" @change="onResizeInput('h')" :disabled="!hasImage" min="1" />
+          </div>
+        </div>
+        <button class="gh-btn gh-btn-secondary text-xs w-full mt-2" @click="applyResize()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">Apply Resize</button>
+      </div>
+
+      <div class="mb-4">
+        <span class="panel-label">Transform</span>
+        <div class="flex gap-2 mb-2">
+          <button class="gh-btn gh-btn-secondary text-xs flex-1" @click="flipHorizontal()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">&#8596; Flip H</button>
+          <button class="gh-btn gh-btn-secondary text-xs flex-1" @click="flipVertical()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">&#8597; Flip V</button>
+        </div>
+        <div class="flex gap-2">
+          <button class="gh-btn gh-btn-secondary text-xs flex-1" @click="rotateImage(-90)" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">&#8634; -90&deg;</button>
+          <button class="gh-btn gh-btn-secondary text-xs flex-1" @click="rotateImage(90)" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">&#8635; +90&deg;</button>
+        </div>
+      </div>
+
+      <div x-show="hasImage" class="mb-4">
+        <span class="panel-label">Info</span>
+        <div class="rounded-md bg-gh-overlay border border-gh-border p-2 text-xs space-y-1 text-gh-muted" style="font-family:monospace">
+          <div class="flex justify-between"><span>Canvas</span><span class="text-gh-text" x-text="(resize.w||0)+'x'+(resize.h||0)+'px'"></span></div>
+          <div class="flex justify-between"><span>Original</span><span class="text-gh-text" x-text="originalSize"></span></div>
+          <div class="flex justify-between"><span>Format</span><span class="text-gh-text" x-text="imgFormat.toUpperCase()"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEXT TAB -->
+    <div x-show="rightTab==='text'" x-cloak>
+      <div class="mb-3">
+        <span class="panel-label">Top Text</span>
+        <input type="text" class="gh-input" placeholder="TOP TEXT" x-model="topText.content" @input="renderCanvas()" :disabled="!hasImage" />
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Bottom Text</span>
+        <input type="text" class="gh-input" placeholder="BOTTOM TEXT" x-model="bottomText.content" @input="renderCanvas()" :disabled="!hasImage" />
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Editing Layer</span>
+        <div class="flex gap-1">
+          <button class="gh-btn text-xs flex-1" :class="activeTextLayer==='top'?'gh-btn-accent':'gh-btn-secondary'" @click="activeTextLayer='top'">Top</button>
+          <button class="gh-btn text-xs flex-1" :class="activeTextLayer==='bottom'?'gh-btn-accent':'gh-btn-secondary'" @click="activeTextLayer='bottom'">Bottom</button>
+        </div>
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Font</span>
+        <select class="gh-select" x-model="activeText.font" @change="renderCanvas()" :disabled="!hasImage">
+          <option value="Impact">Impact</option>
+          <option value="Arial Black">Arial Black</option>
+          <option value="Comic Sans MS">Comic Sans MS</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Trebuchet MS">Trebuchet MS</option>
+          <option value="Verdana">Verdana</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Times New Roman">Times New Roman</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <span class="panel-label" style="margin-bottom:0">Font Size</span>
+          <span class="text-xs font-mono" style="color:#58a6ff;font-family:monospace" x-text="activeText.size+'px'"></span>
+        </div>
+        <input type="range" min="10" max="200" class="gh-range" x-model.number="activeText.size" @input="renderCanvas()" :disabled="!hasImage" />
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Text Color</span>
+        <div class="flex items-center gap-2">
+          <input type="color" x-model="activeText.color" @input="renderCanvas()" class="w-8 h-8 rounded cursor-pointer" style="background:transparent;border:none;padding:0" :disabled="!hasImage" />
+          <input type="text" class="gh-input" x-model="activeText.color" @input="renderCanvas()" :disabled="!hasImage" />
+        </div>
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Stroke Color</span>
+        <div class="flex items-center gap-2">
+          <input type="color" x-model="activeText.strokeColor" @input="renderCanvas()" class="w-8 h-8 rounded cursor-pointer" style="background:transparent;border:none;padding:0" :disabled="!hasImage" />
+          <input type="text" class="gh-input" x-model="activeText.strokeColor" @input="renderCanvas()" :disabled="!hasImage" />
+        </div>
+      </div>
+      <div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <span class="panel-label" style="margin-bottom:0">Stroke Width</span>
+          <span class="text-xs" style="color:#58a6ff;font-family:monospace" x-text="activeText.strokeWidth+'px'"></span>
+        </div>
+        <input type="range" min="0" max="20" class="gh-range" x-model.number="activeText.strokeWidth" @input="renderCanvas()" :disabled="!hasImage" />
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Alignment</span>
+        <div class="flex gap-1">
+          <template x-for="a in ['left','center','right']" :key="a">
+            <button class="gh-btn text-xs flex-1" :class="activeText.align===a?'gh-btn-accent':'gh-btn-secondary'" @click="activeText.align=a;renderCanvas()" x-text="a.charAt(0).toUpperCase()+a.slice(1)" :disabled="!hasImage"></button>
+          </template>
+        </div>
+      </div>
+      <div class="mb-3">
+        <div class="flex justify-between mb-1">
+          <span class="panel-label" style="margin-bottom:0">Y Offset</span>
+          <span class="text-xs" style="color:#58a6ff;font-family:monospace" x-text="activeText.yOffset+'px'"></span>
+        </div>
+        <input type="range" min="-200" max="200" class="gh-range" x-model.number="activeText.yOffset" @input="renderCanvas()" :disabled="!hasImage" />
+      </div>
+      <div class="mb-3">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" x-model="activeText.allCaps" @change="renderCanvas()" :disabled="!hasImage" style="width:1rem;height:1rem;border-radius:.25rem;accent-color:#58a6ff" />
+          <span class="text-xs text-gh-text">ALL CAPS</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- FILTERS TAB -->
+    <div x-show="rightTab==='filters'" x-cloak>
+      <template x-for="f in filterDefs" :key="f.key">
+        <div class="mb-3">
+          <div class="flex justify-between mb-1">
+            <span class="panel-label" style="margin-bottom:0" x-text="f.label"></span>
+            <span class="text-xs" style="color:#58a6ff;font-family:monospace" x-text="filters[f.key]"></span>
+          </div>
+          <input type="range" :min="f.min" :max="f.max" :step="f.step" class="gh-range" x-model.number="filters[f.key]" @input="renderCanvas()" :disabled="!hasImage" />
+        </div>
+      </template>
+      <button class="gh-btn gh-btn-secondary text-xs w-full mb-4" @click="resetFilters()">Reset Filters</button>
+      <div class="mb-3">
+        <span class="panel-label">Presets</span>
+        <div class="grid gap-1.5" style="grid-template-columns:1fr 1fr">
+          <template x-for="p in filterPresets" :key="p.name">
+            <button class="gh-btn gh-btn-secondary text-xs" @click="applyPreset(p)" x-text="p.name"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPORT TAB -->
+    <div x-show="rightTab==='export'" x-cloak>
+      <div class="mb-3">
+        <span class="panel-label">Format</span>
+        <select class="gh-select" x-model="exportFmt">
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/png">PNG (lossless)</option>
+          <option value="image/webp">WebP</option>
+        </select>
+      </div>
+      <div class="mb-3" x-show="exportFmt !== 'image/png'">
+        <div class="flex justify-between mb-1">
+          <span class="panel-label" style="margin-bottom:0">Quality</span>
+          <span class="text-xs" style="color:#58a6ff;font-family:monospace" x-text="Math.round(exportQuality*100)+'%'"></span>
+        </div>
+        <input type="range" min="0.05" max="1" step="0.05" class="gh-range" x-model.number="exportQuality" />
+        <p class="text-xs text-gh-muted mt-1">Est. size: <span class="text-gh-text" style="font-family:monospace" x-text="estimatedSize"></span></p>
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">File Name</span>
+        <input type="text" class="gh-input" x-model="exportName" placeholder="meme" />
+      </div>
+      <div class="mb-3">
+        <span class="panel-label">Output</span>
+        <div class="rounded-md bg-gh-overlay border border-gh-border p-2 text-xs space-y-1 text-gh-muted" style="font-family:monospace">
+          <div class="flex justify-between"><span>Size</span><span class="text-gh-text" x-text="(resize.w||0)+'x'+(resize.h||0)+'px'"></span></div>
+          <div class="flex justify-between"><span>Format</span><span class="text-gh-text" x-text="exportFmt.split('/')[1].toUpperCase()"></span></div>
+        </div>
+      </div>
+      <button class="gh-btn gh-btn-primary text-sm w-full mb-2" @click="downloadImage()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 10.78a.75.75 0 001.06 0l3.75-3.75a.75.75 0 00-1.06-1.06L8.75 8.44V1.75a.75.75 0 00-1.5 0v6.69L4.78 5.97a.75.75 0 00-1.06 1.06l3.75 3.75zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/></svg>
+        Download
+      </button>
+      <button class="gh-btn gh-btn-secondary text-xs w-full" @click="copyToClipboard()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5zM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+        Copy to Clipboard
+      </button>
+    </div>
+
+  </div>
+</aside>
+</div>
+
+<!-- STICKER PANEL -->
+<div x-show="showStickerPanel" x-cloak class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.5)" @click.self="showStickerPanel=false">
+  <div class="bg-gh-surface border border-gh-border rounded-xl shadow-2xl w-80 p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold">Add Sticker / Emoji</h3>
+      <button class="text-gh-muted hover:text-gh-text" @click="showStickerPanel=false">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+      </button>
+    </div>
+    <div class="grid grid-cols-7 gap-1 max-h-48 overflow-y-auto">
+      <template x-for="s in stickerList" :key="s">
+        <button class="text-2xl rounded hover:bg-gh-overlay p-1 transition-colors" @click="addSticker(s);showStickerPanel=false" x-text="s"></button>
+      </template>
+    </div>
+    <div class="mt-3">
+      <input type="text" class="gh-input text-sm" placeholder="Custom emoji / text..." x-model="customSticker" @keydown.enter="addSticker(customSticker);showStickerPanel=false;customSticker=''" />
+      <button class="gh-btn gh-btn-accent text-xs w-full mt-2" @click="addSticker(customSticker);showStickerPanel=false;customSticker=''">Add to Canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div x-show="toast.visible" x-cloak class="toast" x-text="toast.message"></div>
+
+<script>
+function memeEditor() {
+  return {
+    hasImage: false,
+    tool: 'select',
+    rightTab: 'image',
+    zoom: 100,
+    imgInfo: '',
+    originalSize: '',
+    imgFormat: 'jpeg',
+    showStickerPanel: false,
+    customSticker: '',
+    sourceImg: null,
+    transforms: { flipH: false, flipV: false, rotation: 0 },
+    resize: { w: 0, h: 0, lock: true, origW: 0, origH: 0 },
+    topText:    { content:'', font:'Impact', size:60, color:'#ffffff', strokeColor:'#000000', strokeWidth:4, align:'center', yOffset:0, allCaps:true },
+    bottomText: { content:'', font:'Impact', size:60, color:'#ffffff', strokeColor:'#000000', strokeWidth:4, align:'center', yOffset:0, allCaps:true },
+    activeTextLayer: 'top',
+    stickers: [],
+    drag: { active:false, startX:0, startY:0, stickerIdx:-1 },
+    filters: { brightness:100, contrast:100, saturation:100, hue:0, blur:0, sepia:0, grayscale:0, opacity:100 },
+    filterDefs: [
+      { key:'brightness', label:'Brightness', min:0,   max:200, step:1 },
+      { key:'contrast',   label:'Contrast',   min:0,   max:200, step:1 },
+      { key:'saturation', label:'Saturation', min:0,   max:200, step:1 },
+      { key:'hue',        label:'Hue Rotate', min:0,   max:360, step:1 },
+      { key:'blur',       label:'Blur',       min:0,   max:20,  step:0.5 },
+      { key:'sepia',      label:'Sepia',      min:0,   max:100, step:1 },
+      { key:'grayscale',  label:'Grayscale',  min:0,   max:100, step:1 },
+      { key:'opacity',    label:'Opacity',    min:10,  max:100, step:1 },
+    ],
+    filterPresets: [
+      { name:'Normal',    f:{ brightness:100,contrast:100,saturation:100,hue:0,blur:0,sepia:0,grayscale:0,opacity:100 } },
+      { name:'Grayscale', f:{ brightness:100,contrast:110,saturation:0,  hue:0,blur:0,sepia:0,grayscale:100,opacity:100 } },
+      { name:'Vintage',   f:{ brightness:110,contrast:90, saturation:80, hue:0,blur:0,sepia:60,grayscale:0,opacity:100 } },
+      { name:'Vivid',     f:{ brightness:110,contrast:120,saturation:160,hue:0,blur:0,sepia:0,grayscale:0,opacity:100 } },
+      { name:'Muted',     f:{ brightness:90, contrast:80, saturation:60, hue:0,blur:0,sepia:0,grayscale:0,opacity:100 } },
+      { name:'Cold',      f:{ brightness:100,contrast:100,saturation:100,hue:200,blur:0,sepia:0,grayscale:0,opacity:100 } },
+    ],
+    exportFmt: 'image/jpeg',
+    exportQuality: 0.85,
+    exportName: 'meme',
+    toast: { visible:false, message:'', timer:null },
+    stickerList: ['😂','🤣','💀','😭','😩','🥺','😤','🤔','🤯','😳','🙄','😑','🤡','👀','💯','🔥','✅','❌','⚠️','💥','🎉','👍','👎','🤦','🤷','💪','👏','🫡','😎','🥴','🤮','🤢','😏','😈','👻','🤖','👾','🎭','🍕','🍔','💸','💰','🚀','🌈','⚡','🎯','🏆','🎪'],
+
+    get activeText() {
+      return this.activeTextLayer === 'top' ? this.topText : this.bottomText;
+    },
+
+    get estimatedSize() {
+      const canvas = document.getElementById('mainCanvas');
+      if (!canvas || !this.hasImage) return '—';
+      try {
+        const url = canvas.toDataURL(this.exportFmt, this.exportQuality);
+        const bytes = Math.round((url.length - 22) * 3 / 4);
+        if (bytes > 1048576) return (bytes/1048576).toFixed(1)+' MB';
+        if (bytes > 1024)    return (bytes/1024).toFixed(0)+' KB';
+        return bytes+' B';
+      } catch(e) { return '—'; }
+    },
+
+    init() {
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        const k = e.key.toLowerCase();
+        if (k === 'v') this.tool = 'select';
+        if (k === 't') { this.tool = 'text'; this.rightTab = 'text'; }
+        if ((e.ctrlKey || e.metaKey) && k === 's') { e.preventDefault(); this.downloadImage(); }
+        if ((e.ctrlKey || e.metaKey) && k === 'v') { e.preventDefault(); this.pasteFromClipboard(); }
+      });
+      document.addEventListener('paste', (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const f = item.getAsFile();
+            if (f) this.loadFile(f);
+            break;
+          }
+        }
+      });
+      this.loadFromStorage();
+    },
+
+    loadImageFile(e) {
+      const f = e.target.files && e.target.files[0];
+      if (f) this.loadFile(f);
+      e.target.value = '';
+    },
+
+    loadFile(file) {
+      if (!file.type.startsWith('image/')) { this.showToast('Please select an image file'); return; }
+      this.imgFormat = file.type.split('/')[1] || 'jpeg';
+      this.exportName = file.name.replace(/\.[^.]+$/, '') || 'meme';
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.loadImageFromDataURL(e.target.result);
+        this.originalSize = this.formatBytes(file.size);
+      };
+      reader.readAsDataURL(file);
+    },
+
+    loadImageFromDataURL(dataURL) {
+      const img = new Image();
+      img.onload = () => {
+        this.sourceImg = img;
+        this.hasImage = true;
+        this.resize.origW = img.naturalWidth;
+        this.resize.origH = img.naturalHeight;
+        this.resize.w     = img.naturalWidth;
+        this.resize.h     = img.naturalHeight;
+        this.stickers     = [];
+        this.transforms   = { flipH:false, flipV:false, rotation:0 };
+        this.$nextTick(() => this.renderCanvas());
+        this.updateInfo();
+      };
+      img.src = dataURL;
+    },
+
+    handleFileDrop(e) {
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) this.loadFile(f);
+    },
+
+    async pasteFromClipboard() {
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          for (const type of item.types) {
+            if (type.startsWith('image/')) {
+              const blob = await item.getType(type);
+              this.loadFile(new File([blob], 'pasted.'+type.split('/')[1], { type }));
+              return;
+            }
+          }
+        }
+      } catch(e) {
+        this.showToast('Use Ctrl+V or drag-and-drop an image');
+      }
+    },
+
+    renderCanvas() {
+      if (!this.hasImage || !this.sourceImg) return;
+      const canvas = document.getElementById('mainCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = Math.max(1, this.resize.w);
+      const H = Math.max(1, this.resize.h);
+      canvas.width  = W;
+      canvas.height = H;
+
+      ctx.save();
+      ctx.filter = this.buildFilter();
+      ctx.translate(W/2, H/2);
+      ctx.rotate(this.transforms.rotation * Math.PI / 180);
+      ctx.scale(this.transforms.flipH ? -1 : 1, this.transforms.flipV ? -1 : 1);
+      ctx.drawImage(this.sourceImg, -W/2, -H/2, W, H);
+      ctx.restore();
+
+      ctx.filter = 'none';
+      for (const s of this.stickers) {
+        ctx.save();
+        ctx.font = s.size + 'px serif';
+        ctx.globalAlpha = s.opacity;
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rotation * Math.PI / 180);
+        ctx.fillText(s.text, 0, 0);
+        ctx.restore();
+      }
+
+      ctx.filter = 'none';
+      this.drawMemeText(ctx, W, H);
+      this.updateInfo();
+      this.debouncedSave();
+    },
+
+    buildFilter() {
+      const f = this.filters;
+      const parts = [
+        'brightness('+f.brightness+'%)',
+        'contrast('+f.contrast+'%)',
+        'saturate('+f.saturation+'%)',
+        'hue-rotate('+f.hue+'deg)',
+      ];
+      if (f.blur     > 0)   parts.push('blur('+f.blur+'px)');
+      if (f.sepia    > 0)   parts.push('sepia('+f.sepia+'%)');
+      if (f.grayscale > 0)  parts.push('grayscale('+f.grayscale+'%)');
+      if (f.opacity  < 100) parts.push('opacity('+f.opacity+'%)');
+      return parts.join(' ');
+    },
+
+    drawMemeText(ctx, W, H) {
+      const drawLayer = (layer, isTop) => {
+        if (!layer.content) return;
+        const text = layer.allCaps ? layer.content.toUpperCase() : layer.content;
+        const fontSize = Math.max(12, layer.size * 0.5 + (W / 800) * layer.size * 0.5);
+        ctx.font = '900 ' + fontSize + 'px ' + layer.font;
+        ctx.textAlign  = layer.align;
+        ctx.lineWidth  = layer.strokeWidth;
+        ctx.lineJoin   = 'round';
+        const maxW = W - 40;
+        const words = text.split(' ');
+        const lines = [];
+        let cur = '';
+        for (const w of words) {
+          const test = cur ? cur + ' ' + w : w;
+          if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+          else cur = test;
+        }
+        if (cur) lines.push(cur);
+        const lh = fontSize * 1.2;
+        let y0;
+        if (isTop)  y0 = 10 + fontSize + layer.yOffset;
+        else        y0 = H - 10 - lines.length * lh + fontSize + layer.yOffset;
+        const xp = layer.align === 'left' ? 20 : layer.align === 'right' ? W - 20 : W / 2;
+        for (let i = 0; i < lines.length; i++) {
+          const y = y0 + i * lh;
+          ctx.strokeStyle = layer.strokeColor;
+          ctx.strokeText(lines[i], xp, y);
+          ctx.fillStyle = layer.color;
+          ctx.fillText(lines[i], xp, y);
+        }
+      };
+      drawLayer(this.topText, true);
+      drawLayer(this.bottomText, false);
+    },
+
+    flipHorizontal() { if (!this.hasImage) return; this.transforms.flipH = !this.transforms.flipH; this.renderCanvas(); },
+    flipVertical()   { if (!this.hasImage) return; this.transforms.flipV = !this.transforms.flipV; this.renderCanvas(); },
+
+    rotateImage(deg) {
+      if (!this.hasImage) return;
+      this.transforms.rotation = ((this.transforms.rotation + deg) % 360 + 360) % 360;
+      if (Math.abs(deg) === 90) { const t = this.resize.w; this.resize.w = this.resize.h; this.resize.h = t; }
+      this.renderCanvas();
+    },
+
+    onResizeInput(changed) {
+      if (!this.resize.lock) return;
+      const ratio = this.resize.origW / this.resize.origH;
+      if (changed === 'w') this.resize.h = Math.max(1, Math.round(this.resize.w / ratio));
+      else                 this.resize.w = Math.max(1, Math.round(this.resize.h * ratio));
+    },
+
+    applyResize() {
+      if (!this.hasImage) return;
+      this.renderCanvas();
+      this.showToast('Resized to ' + this.resize.w + 'x' + this.resize.h);
+    },
+
+    resetFilters() {
+      this.filters = { brightness:100, contrast:100, saturation:100, hue:0, blur:0, sepia:0, grayscale:0, opacity:100 };
+      this.renderCanvas();
+    },
+
+    applyPreset(p) {
+      this.filters = Object.assign({}, p.f);
+      this.renderCanvas();
+      this.showToast('Preset: ' + p.name);
+    },
+
+    addSticker(text) {
+      if (!this.hasImage || !text) return;
+      const canvas = document.getElementById('mainCanvas');
+      this.stickers.push({ text, x: canvas ? canvas.width/2 : 100, y: canvas ? canvas.height/2 : 100, size:64, rotation:0, opacity:1 });
+      this.renderCanvas();
+    },
+
+    onCanvasMouseDown(e) {
+      if (!this.stickers.length) return;
+      const canvas = document.getElementById('mainCanvas');
+      const rect   = canvas.getBoundingClientRect();
+      const scale  = (this.zoom / 100);
+      const x      = (e.clientX - rect.left)  / scale;
+      const y      = (e.clientY - rect.top)   / scale;
+      for (let i = this.stickers.length - 1; i >= 0; i--) {
+        const s = this.stickers[i];
+        if (Math.abs(x - s.x) < s.size / 2 && Math.abs(y - s.y) < s.size / 2) {
+          this.drag = { active:true, startX:x-s.x, startY:y-s.y, stickerIdx:i };
+          return;
+        }
+      }
+    },
+
+    onCanvasMouseMove(e) {
+      if (!this.drag.active) return;
+      const canvas = document.getElementById('mainCanvas');
+      const rect   = canvas.getBoundingClientRect();
+      const scale  = (this.zoom / 100);
+      const x      = (e.clientX - rect.left)  / scale;
+      const y      = (e.clientY - rect.top)   / scale;
+      const s      = this.stickers[this.drag.stickerIdx];
+      if (s) { s.x = x - this.drag.startX; s.y = y - this.drag.startY; this.renderCanvas(); }
+    },
+
+    onCanvasMouseUp() { this.drag.active = false; this.drag.stickerIdx = -1; },
+
+    downloadImage() {
+      if (!this.hasImage) return;
+      const canvas = document.getElementById('mainCanvas');
+      const ext = this.exportFmt === 'image/png' ? 'png' : this.exportFmt === 'image/webp' ? 'webp' : 'jpg';
+      const url = this.exportFmt === 'image/png'
+        ? canvas.toDataURL('image/png')
+        : canvas.toDataURL(this.exportFmt, this.exportQuality);
+      const a = document.createElement('a');
+      a.href = url; a.download = (this.exportName || 'meme') + '.' + ext; a.click();
+      this.showToast('Saved as ' + a.download);
+    },
+
+    async copyToClipboard() {
+      if (!this.hasImage) return;
+      try {
+        const canvas = document.getElementById('mainCanvas');
+        canvas.toBlob(async (blob) => {
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+          this.showToast('Copied to clipboard!');
+        }, 'image/png');
+      } catch(e) { this.showToast('Copy not supported — use Download instead'); }
+    },
+
+    _saveTimer: null,
+
+    debouncedSave() {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => this.saveToStorage(), 1000);
+    },
+
+    saveToStorage() {
+      try {
+        const canvas = document.getElementById('mainCanvas');
+        if (!canvas || !this.hasImage) return;
+        localStorage.setItem('mf_img',        canvas.toDataURL('image/jpeg', 0.5));
+        localStorage.setItem('mf_top',        JSON.stringify(this.topText));
+        localStorage.setItem('mf_bot',        JSON.stringify(this.bottomText));
+        localStorage.setItem('mf_filters',    JSON.stringify(this.filters));
+        localStorage.setItem('mf_resize',     JSON.stringify({ w:this.resize.w, h:this.resize.h, origW:this.resize.origW, origH:this.resize.origH }));
+        localStorage.setItem('mf_stickers',   JSON.stringify(this.stickers));
+        localStorage.setItem('mf_transforms', JSON.stringify(this.transforms));
+      } catch(e) { /* quota exceeded */ }
+    },
+
+    loadFromStorage() {
+      try {
+        const img = localStorage.getItem('mf_img');
+        if (!img) return;
+        const top = localStorage.getItem('mf_top');
+        const bot = localStorage.getItem('mf_bot');
+        const flt = localStorage.getItem('mf_filters');
+        const rsz = localStorage.getItem('mf_resize');
+        const stk = localStorage.getItem('mf_stickers');
+        const trn = localStorage.getItem('mf_transforms');
+        if (top) { try { this.topText    = JSON.parse(top); } catch(e){} }
+        if (bot) { try { this.bottomText = JSON.parse(bot); } catch(e){} }
+        if (flt) { try { this.filters    = JSON.parse(flt); } catch(e){} }
+        if (rsz) { try { const r = JSON.parse(rsz); this.resize = Object.assign(this.resize, r); } catch(e){} }
+        if (stk) { try { this.stickers   = JSON.parse(stk); } catch(e){} }
+        if (trn) { try { this.transforms = JSON.parse(trn); } catch(e){} }
+        this.loadImageFromDataURL(img);
+        this.showToast('Session restored');
+      } catch(e) {}
+    },
+
+    updateInfo() {
+      this.imgInfo = (this.resize.w||0) + 'x' + (this.resize.h||0) + 'px';
+    },
+
+    formatBytes(b) {
+      if (b > 1048576) return (b/1048576).toFixed(1)+' MB';
+      if (b > 1024)    return Math.round(b/1024)+' KB';
+      return b+' B';
+    },
+
+    showToast(msg) {
+      clearTimeout(this.toast.timer);
+      this.toast.message = msg;
+      this.toast.visible = true;
+      this.toast.timer   = setTimeout(() => { this.toast.visible = false; }, 3000);
+    },
+
+    resetAll() {
+      if (!this.hasImage) return;
+      if (!confirm('Clear current image and all edits?')) return;
+      this.hasImage = false; this.sourceImg = null; this.stickers = [];
+      this.topText.content = ''; this.bottomText.content = '';
+      this.resetFilters();
+      this.transforms = { flipH:false, flipV:false, rotation:0 };
+      ['mf_img','mf_top','mf_bot','mf_filters','mf_resize','mf_stickers','mf_transforms'].forEach(k => localStorage.removeItem(k));
+    },
+  };
+}
+</script>
+</body>
+</html>
