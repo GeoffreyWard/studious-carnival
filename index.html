@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>MemeForge &mdash; In-Browser Meme Editor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -55,12 +55,61 @@
     .toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:#21262d;border:1px solid #30363d;border-radius:.5rem;padding:.75rem 1rem;color:#c9d1d9;font-size:.8125rem;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:slideIn .2s ease}
     @keyframes slideIn{from{transform:translateY(1rem);opacity:0}to{transform:translateY(0);opacity:1}}
     canvas{display:block}
+
+    /* ── Resize handles ── */
+    .canvas-wrap{position:relative;display:inline-block;line-height:0}
+    .rh{position:absolute;width:10px;height:10px;background:#58a6ff;border:2px solid #0d1117;border-radius:2px;z-index:6;touch-action:none}
+    .rh-nw{top:-5px;left:-5px;cursor:nw-resize}
+    .rh-n {top:-5px;left:calc(50% - 5px);cursor:n-resize}
+    .rh-ne{top:-5px;right:-5px;cursor:ne-resize}
+    .rh-e {top:calc(50% - 5px);right:-5px;cursor:e-resize}
+    .rh-se{bottom:-5px;right:-5px;cursor:se-resize}
+    .rh-s {bottom:-5px;left:calc(50% - 5px);cursor:s-resize}
+    .rh-sw{bottom:-5px;left:-5px;cursor:sw-resize}
+    .rh-w {top:calc(50% - 5px);left:-5px;cursor:w-resize}
+
+    /* ── Mobile layout ── */
+    @media(max-width:767px){
+      .left-sidebar{position:fixed;left:0;bottom:0;top:auto;flex-direction:row;width:100%;height:3rem;padding:0 .25rem;overflow-x:auto;z-index:20;border-top:1px solid #30363d;border-right:none;border-bottom:none}
+      .left-sidebar .flex-1{display:none}
+      .left-sidebar .divider{width:1px;height:1.5rem;margin:0 .125rem}
+      .main-area{margin-bottom:3rem}
+      .right-panel-wrap{position:fixed;right:-100%;top:2.75rem;bottom:0;z-index:30;transition:right .25s ease;width:min(280px,88vw);overflow:hidden}
+      .right-panel-wrap.open{right:0}
+      .panel-overlay{display:block}
+    }
+    @media(min-width:768px){
+      .right-panel-wrap{position:relative;right:auto!important}
+      .panel-overlay{display:none!important}
+      .mobile-menu-btn{display:none!important}
+    }
+    .panel-overlay{display:none;position:fixed;inset:0;z-index:29;background:rgba(0,0,0,.4)}
+
+    /* ── Band mode info strip ── */
+    .band-strip-preview{height:1.25rem;border-radius:.25rem;border:1px solid #30363d;margin-top:.25rem}
+
+    /* ── Selected item outline on canvas (indicator dot) ── */
+    .selected-label-indicator{position:absolute;border:2px dashed #58a6ff;border-radius:4px;pointer-events:none;z-index:4;transform-origin:top left}
+
+    /* ── Keyboard hint ── */
+    kbd{padding:.15rem .4rem;font-size:.7rem;border-radius:.25rem;background:#21262d;border:1px solid #30363d;font-family:monospace}
+
+    /* ── Mobile-friendly bigger touch targets ── */
+    @media(max-width:767px){
+      .tool-btn{width:2.75rem;height:2.75rem}
+      .gh-btn{padding:.5rem .75rem}
+      .toast{bottom:4.5rem}
+    }
   </style>
 </head>
 <body class="h-full bg-gh-canvas text-gh-text overflow-hidden select-none"
   style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
   x-data="memeEditor()" x-init="init()"
-  @dragover.prevent @drop.prevent="handleFileDrop($event)">
+  @dragover.prevent @drop.prevent="handleFileDrop($event)"
+  @mousemove.window="onWindowMouseMove($event)"
+  @mouseup.window="onWindowMouseUp($event)"
+  @touchmove.window.passive="onWindowTouchMove($event)"
+  @touchend.window="onWindowTouchEnd($event)">
 
 <!-- TOP BAR -->
 <header class="flex items-center gap-3 px-4 h-11 bg-gh-surface border-b border-gh-border" style="position:relative;z-index:20">
@@ -70,43 +119,54 @@
       <path d="M6 16l3-8 3 4 2-3 2 7" stroke="white" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <span class="font-semibold text-sm">MemeForge</span>
-    <span class="text-gh-muted text-xs">v1.0</span>
+    <span class="text-gh-muted text-xs hidden sm:inline">v2.0</span>
   </div>
-  <div class="h-5 w-px bg-gh-border"></div>
+  <div class="h-5 w-px bg-gh-border hidden sm:block"></div>
   <label class="gh-btn gh-btn-secondary text-xs cursor-pointer">
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
-    Open Image
+    <span class="hidden sm:inline">Open Image</span><span class="sm:hidden">Open</span>
     <input type="file" accept="image/*" class="sr-only" @change="loadImageFile($event)" />
   </label>
-  <button class="gh-btn gh-btn-secondary text-xs" @click="pasteFromClipboard()" title="Paste (Ctrl+V)">
+  <button class="gh-btn gh-btn-secondary text-xs hidden sm:inline-flex" @click="pasteFromClipboard()" title="Paste (Ctrl+V)">
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.75 1a.75.75 0 00-.75.75v3c0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75v-3a.75.75 0 00-.75-.75h-4.5zm.75 3V2.5h3V4h-3zm-2.874-.467a.75.75 0 00-.752-1.298A1.75 1.75 0 002 3.75v9.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0014 13.25v-9.5a1.75 1.75 0 00-1.124-1.617.75.75 0 10-.752 1.298.25.25 0 01.126.219v9.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-9.5a.25.25 0 01.126-.219z"/></svg>
     Paste
   </button>
+  <!-- Undo/Redo -->
+  <button class="gh-btn gh-btn-secondary text-xs" @click="undo()" :disabled="historyIdx<=0" :class="{'opacity-40 cursor-not-allowed':historyIdx<=0}" title="Undo (Ctrl+Z)">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M1.22 6.28a.75.75 0 000 1.06l3.5 3.5a.75.75 0 101.06-1.06L3.56 7.5h7.69a3.75 3.75 0 010 7.5H8a.75.75 0 000 1.5h3.25a5.25 5.25 0 100-10.5H3.56l2.22-2.22a.75.75 0 00-1.06-1.06l-3.5 3.5z"/></svg>
+  </button>
+  <button class="gh-btn gh-btn-secondary text-xs" @click="redo()" :disabled="historyIdx>=history.length-1" :class="{'opacity-40 cursor-not-allowed':historyIdx>=history.length-1}" title="Redo (Ctrl+Shift+Z)">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14.78 6.28a.75.75 0 000 1.06l-3.5 3.5a.75.75 0 11-1.06-1.06L12.44 7.5H4.75a3.75 3.75 0 000 7.5H8a.75.75 0 010 1.5H4.75a5.25 5.25 0 110-10.5h7.69l-2.22-2.22a.75.75 0 011.06-1.06l3.5 3.5z"/></svg>
+  </button>
   <div class="flex-1"></div>
-  <div x-show="hasImage" class="text-xs text-gh-muted" x-text="imgInfo"></div>
+  <div x-show="hasImage" class="text-xs text-gh-muted hidden sm:block" x-text="imgInfo"></div>
   <button class="gh-btn gh-btn-primary text-xs"
     :class="{'opacity-40 cursor-not-allowed':!hasImage}"
     @click="downloadImage()" :disabled="!hasImage">
     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 10.78a.75.75 0 001.06 0l3.75-3.75a.75.75 0 00-1.06-1.06L8.75 8.44V1.75a.75.75 0 00-1.5 0v6.69L4.78 5.97a.75.75 0 00-1.06 1.06l3.75 3.75zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/></svg>
     Export
   </button>
+  <!-- Mobile panel toggle -->
+  <button class="mobile-menu-btn tool-btn ml-1" @click="mobilePanelOpen=!mobilePanelOpen" title="Options">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75A.75.75 0 011.75 2h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 2.75zm0 5A.75.75 0 011.75 7h12.5a.75.75 0 010 1.5H1.75A.75.75 0 011 7.75zM1.75 12a.75.75 0 000 1.5h12.5a.75.75 0 000-1.5H1.75z"/></svg>
+  </button>
 </header>
 
 <!-- MAIN LAYOUT -->
-<div class="flex" style="height:calc(100vh - 2.75rem)">
+<div class="flex main-area" style="height:calc(100vh - 2.75rem)">
 
 <!-- LEFT TOOLBAR -->
-<aside class="flex flex-col items-center gap-1 py-3 px-1.5 bg-gh-surface border-r border-gh-border w-12 shrink-0">
+<aside class="left-sidebar flex flex-col items-center gap-1 py-3 px-1.5 bg-gh-surface border-r border-gh-border w-12 shrink-0">
   <button class="tool-btn" :class="{active:tool==='select'}" @click="tool='select'" title="Select (V)">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1l12 6-7 1-3 7z"/></svg>
   </button>
   <button class="tool-btn" :class="{active:tool==='text'}" @click="tool='text';rightTab='text'" title="Text (T)">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A.5.5 0 012.5 2h11a.5.5 0 010 1H8.75v10.5a.5.5 0 01-1 0V3H2.5A.5.5 0 012 2.5z"/></svg>
   </button>
-  <button class="tool-btn" :class="{active:tool==='sticker'}" @click="tool='sticker';showStickerPanel=true" title="Stickers">
+  <button class="tool-btn" :class="{active:tool==='sticker'}" @click="tool='sticker';showStickerPanel=true" title="Stickers / Emoji">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zm4-1a1 1 0 112 0 1 1 0 01-2 0zm4 0a1 1 0 112 0 1 1 0 01-2 0zm-5.2 3.6a.5.5 0 01.7-.1 5 5 0 006 0 .5.5 0 01.6.8 6 6 0 01-7.2 0 .5.5 0 01-.1-.7z"/></svg>
   </button>
-  <div class="w-6 h-px bg-gh-border my-1"></div>
+  <div class="divider w-6 h-px bg-gh-border my-1"></div>
   <button class="tool-btn" @click="flipHorizontal()" :disabled="!hasImage" :class="{'opacity-40 cursor-not-allowed':!hasImage}" title="Flip H">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.25 3.56L4.56 1.22A.75.75 0 003.5 1.75v12.5a.75.75 0 001.06.53l2.69-2.34V3.56zm1.5 0v8.88l2.69 2.34a.75.75 0 001.06-.53V1.75a.75.75 0 00-1.06-.53L8.75 3.56z"/></svg>
   </button>
@@ -126,7 +186,8 @@
 </aside>
 
 <!-- CANVAS AREA -->
-<main class="flex-1 flex flex-col items-center justify-center overflow-auto checkerboard relative">
+<main class="flex-1 flex flex-col items-center justify-center overflow-auto checkerboard relative" id="canvasMain"
+  @click="onCanvasAreaClick($event)">
   <!-- Drop hint -->
   <div x-show="!hasImage" class="flex flex-col items-center gap-4 pointer-events-none">
     <div class="w-24 h-24 rounded-2xl bg-gh-overlay border-2 border-dashed border-gh-border flex items-center justify-center">
@@ -137,7 +198,7 @@
     </div>
     <div class="text-center">
       <p class="text-gh-text font-medium">Drop an image here</p>
-      <p class="text-gh-muted text-sm mt-1">or paste with <kbd style="padding:.15rem .4rem;font-size:.75rem;border-radius:.25rem;background:#21262d;border:1px solid #30363d;font-family:monospace">Ctrl+V</kbd></p>
+      <p class="text-gh-muted text-sm mt-1">or paste with <kbd>Ctrl+V</kbd></p>
     </div>
     <label class="gh-btn gh-btn-accent text-sm cursor-pointer pointer-events-auto">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
@@ -146,48 +207,72 @@
     </label>
   </div>
 
-  <!-- Canvas -->
-  <div x-show="hasImage" class="relative" :style="`transform:scale(${zoom/100});transform-origin:center center`">
+  <!-- Canvas with resize handles -->
+  <div x-show="hasImage" class="canvas-wrap"
+    :style="`transform:scale(${zoom/100});transform-origin:center center`">
     <canvas id="mainCanvas" class="shadow-2xl"
       @mousedown="onCanvasMouseDown($event)"
       @mousemove="onCanvasMouseMove($event)"
       @mouseup="onCanvasMouseUp($event)"
-      @mouseleave="onCanvasMouseUp($event)">
+      @mouseleave="onCanvasMouseLeave($event)"
+      @touchstart.passive="onCanvasTouchStart($event)"
+      @touchmove.prevent="onCanvasTouchMove($event)"
+      @touchend="onCanvasTouchEnd($event)"
+      :style="resizeDrag.active?'cursor:crosshair':''">
     </canvas>
+
+    <!-- Resize handles (always visible when image loaded) -->
+    <template x-if="hasImage">
+      <div>
+        <div class="rh rh-nw" @mousedown.stop="startResizeDrag($event,'nw')" @touchstart.stop.passive="startResizeTouchDrag($event,'nw')"></div>
+        <div class="rh rh-n"  @mousedown.stop="startResizeDrag($event,'n')"  @touchstart.stop.passive="startResizeTouchDrag($event,'n')"></div>
+        <div class="rh rh-ne" @mousedown.stop="startResizeDrag($event,'ne')" @touchstart.stop.passive="startResizeTouchDrag($event,'ne')"></div>
+        <div class="rh rh-e"  @mousedown.stop="startResizeDrag($event,'e')"  @touchstart.stop.passive="startResizeTouchDrag($event,'e')"></div>
+        <div class="rh rh-se" @mousedown.stop="startResizeDrag($event,'se')" @touchstart.stop.passive="startResizeTouchDrag($event,'se')"></div>
+        <div class="rh rh-s"  @mousedown.stop="startResizeDrag($event,'s')"  @touchstart.stop.passive="startResizeTouchDrag($event,'s')"></div>
+        <div class="rh rh-sw" @mousedown.stop="startResizeDrag($event,'sw')" @touchstart.stop.passive="startResizeTouchDrag($event,'sw')"></div>
+        <div class="rh rh-w"  @mousedown.stop="startResizeDrag($event,'w')"  @touchstart.stop.passive="startResizeTouchDrag($event,'w')"></div>
+      </div>
+    </template>
   </div>
 
   <!-- Zoom bar -->
-  <div x-show="hasImage" class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gh-surface border border-gh-border rounded-full px-3 py-1.5 shadow-lg" style="transform:translateX(-50%)">
+  <div x-show="hasImage" class="absolute bottom-4 left-1/2 flex items-center gap-2 bg-gh-surface border border-gh-border rounded-full px-3 py-1.5 shadow-lg" style="transform:translateX(-50%)">
     <button class="text-gh-muted hover:text-gh-text w-5 h-5 flex items-center justify-center" @click="zoom=Math.max(10,zoom-10)" style="font-size:1rem;line-height:1">&minus;</button>
-    <input type="range" min="10" max="300" step="5" x-model.number="zoom" class="gh-range w-24" />
+    <input type="range" min="10" max="300" step="5" x-model.number="zoom" class="gh-range w-20 sm:w-24" />
     <button class="text-gh-muted hover:text-gh-text w-5 h-5 flex items-center justify-center" @click="zoom=Math.min(300,zoom+10)" style="font-size:1rem;line-height:1">+</button>
     <span class="text-xs text-gh-muted font-mono w-10 text-center" x-text="zoom+'%'" style="font-family:monospace"></span>
     <div class="w-px h-3 bg-gh-border"></div>
-    <button class="text-xs text-gh-muted hover:text-gh-text" @click="zoom=100">Fit</button>
+    <button class="text-xs text-gh-muted hover:text-gh-text" @click="fitZoom()">Fit</button>
   </div>
 </main>
 
+<!-- Panel overlay (mobile) -->
+<div class="panel-overlay" x-show="mobilePanelOpen" @click="mobilePanelOpen=false" x-cloak></div>
+
 <!-- RIGHT PANEL -->
-<aside class="w-64 shrink-0 bg-gh-surface border-l border-gh-border flex flex-col overflow-hidden">
-  <div class="flex border-b border-gh-border px-2 shrink-0">
+<aside class="right-panel-wrap w-64 shrink-0 bg-gh-surface border-l border-gh-border flex flex-col overflow-hidden" :class="{open:mobilePanelOpen}">
+  <div class="flex border-b border-gh-border px-2 shrink-0 overflow-x-auto">
     <button class="tab-btn" :class="{active:rightTab==='image'}" @click="rightTab='image'">Image</button>
     <button class="tab-btn" :class="{active:rightTab==='text'}" @click="rightTab='text'">Text</button>
+    <button class="tab-btn" :class="{active:rightTab==='layers'}" @click="rightTab='layers'">Layers</button>
     <button class="tab-btn" :class="{active:rightTab==='filters'}" @click="rightTab='filters'">Filters</button>
     <button class="tab-btn" :class="{active:rightTab==='export'}" @click="rightTab='export'">Export</button>
   </div>
 
   <div class="flex-1 overflow-y-auto p-3">
 
-    <!-- IMAGE TAB -->
+    <!-- ── IMAGE TAB ── -->
     <div x-show="rightTab==='image'" x-cloak>
       <div class="mb-4">
-        <span class="panel-label">Dimensions</span>
+        <span class="panel-label">Canvas Size</span>
+        <p class="text-xs text-gh-muted mb-2">Drag the blue handles on the canvas edges to resize, or enter values below.</p>
         <div class="flex gap-2 items-end">
           <div class="flex-1">
             <label class="text-xs text-gh-muted mb-1 block">W (px)</label>
             <input type="number" class="gh-input" x-model.number="resize.w" @change="onResizeInput('w')" :disabled="!hasImage" min="1" />
           </div>
-          <button class="mb-1 text-gh-muted hover:text-gh-accent flex-shrink-0" @click="resize.lock=!resize.lock" :title="resize.lock?'Unlock':'Lock aspect ratio'">
+          <button class="mb-1 text-gh-muted hover:text-gh-accent flex-shrink-0" @click="resize.lock=!resize.lock" :title="resize.lock?'Unlock aspect ratio':'Lock aspect ratio'">
             <template x-if="resize.lock">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4 7V5a4 4 0 018 0v2h.25c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25H3.75C3.06 15 2.5 14.44 2.5 13.75v-5.5C2.5 7.56 3.06 7 3.75 7H4zm1.5 0h5V5a2.5 2.5 0 00-5 0v2z"/></svg>
             </template>
@@ -223,10 +308,61 @@
           <div class="flex justify-between"><span>Format</span><span class="text-gh-text" x-text="imgFormat.toUpperCase()"></span></div>
         </div>
       </div>
+
+      <div class="mb-3">
+        <span class="panel-label">Shortcuts</span>
+        <div class="text-xs text-gh-muted space-y-1">
+          <div class="flex justify-between"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
+          <div class="flex justify-between"><span>Redo</span><kbd>Ctrl+Shift+Z</kbd></div>
+          <div class="flex justify-between"><span>Export</span><kbd>Ctrl+S</kbd></div>
+          <div class="flex justify-between"><span>Select tool</span><kbd>V</kbd></div>
+          <div class="flex justify-between"><span>Text tool</span><kbd>T</kbd></div>
+          <div class="flex justify-between"><span>Delete selected</span><kbd>Del</kbd></div>
+        </div>
+      </div>
     </div>
 
-    <!-- TEXT TAB -->
+    <!-- ── TEXT TAB ── -->
     <div x-show="rightTab==='text'" x-cloak>
+
+      <!-- Band Mode Toggle -->
+      <div class="mb-4 p-2 rounded-md bg-gh-overlay border border-gh-border">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gh-text">Layout Mode</span>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <span class="text-xs text-gh-muted" x-text="bandMode?'Band':'Overlay'"></span>
+            <div class="relative w-8 h-4" @click="bandMode=!bandMode;renderCanvas()">
+              <div class="absolute inset-0 rounded-full transition-colors" :class="bandMode?'bg-gh-accent':'bg-gh-border'"></div>
+              <div class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform" :style="bandMode?'left:17px':'left:2px'"></div>
+            </div>
+          </label>
+        </div>
+        <div x-show="!bandMode" class="text-xs text-gh-muted">Text overlaid on image</div>
+        <div x-show="bandMode" class="space-y-2">
+          <p class="text-xs text-gh-muted">Top &amp; Bottom text in separate color bands</p>
+          <div>
+            <label class="text-xs text-gh-muted mb-1 block">Top Band Height (px)</label>
+            <input type="range" min="30" max="300" step="5" class="gh-range" x-model.number="topBandH" @input="renderCanvas()" :disabled="!hasImage" />
+            <div class="flex justify-between text-xs text-gh-muted mt-0.5"><span>30</span><span class="text-gh-accent font-mono" x-text="topBandH+'px'"></span><span>300</span></div>
+          </div>
+          <div>
+            <label class="text-xs text-gh-muted mb-1 block">Bottom Band Height (px)</label>
+            <input type="range" min="30" max="300" step="5" class="gh-range" x-model.number="bottomBandH" @input="renderCanvas()" :disabled="!hasImage" />
+            <div class="flex justify-between text-xs text-gh-muted mt-0.5"><span>30</span><span class="text-gh-accent font-mono" x-text="bottomBandH+'px'"></span><span>300</span></div>
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-gh-muted mb-1 block">Top BG</label>
+              <input type="color" class="w-full h-7 rounded cursor-pointer" x-model="topBandBg" @input="renderCanvas()" style="border:1px solid #30363d;padding:1px" />
+            </div>
+            <div class="flex-1">
+              <label class="text-xs text-gh-muted mb-1 block">Bottom BG</label>
+              <input type="color" class="w-full h-7 rounded cursor-pointer" x-model="bottomBandBg" @input="renderCanvas()" style="border:1px solid #30363d;padding:1px" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="mb-3">
         <span class="panel-label">Top Text</span>
         <input type="text" class="gh-input" placeholder="TOP TEXT" x-model="topText.content" @input="renderCanvas()" :disabled="!hasImage" />
@@ -306,7 +442,136 @@
       </div>
     </div>
 
-    <!-- FILTERS TAB -->
+    <!-- ── LAYERS TAB ── -->
+    <div x-show="rightTab==='layers'" x-cloak>
+      <!-- Add custom text label -->
+      <div class="mb-4">
+        <span class="panel-label">Add Custom Text</span>
+        <p class="text-xs text-gh-muted mb-2">Adds a movable text element (like a sticker). Use the <strong>Select</strong> tool to drag it.</p>
+        <input type="text" class="gh-input mb-2" placeholder="Enter text…" x-model="newLabelText" @keydown.enter="addTextLabel()" :disabled="!hasImage" />
+        <button class="gh-btn gh-btn-accent text-xs w-full" @click="addTextLabel()" :disabled="!hasImage||!newLabelText.trim()" :class="{'opacity-40 cursor-not-allowed':!hasImage||!newLabelText.trim()}">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+          Add Text to Canvas
+        </button>
+      </div>
+
+      <!-- Selected item controls -->
+      <div x-show="selectedType==='label' && selectedIdx>=0 && selectedIdx<textLabels.length" class="mb-4 p-2 rounded-md bg-gh-overlay border border-gh-border">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gh-text">Selected Text</span>
+          <button class="text-xs text-gh-muted hover:text-red-400" @click="deleteSelected()">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+        <template x-if="selectedType==='label' && selectedIdx>=0 && selectedIdx<textLabels.length">
+          <div class="space-y-2">
+            <input type="text" class="gh-input text-xs" x-model="textLabels[selectedIdx].text" @input="renderCanvas()" placeholder="Text…" />
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-xs text-gh-muted mb-0.5 block">Color</label>
+                <input type="color" class="w-full h-7 rounded cursor-pointer" x-model="textLabels[selectedIdx].color" @input="renderCanvas()" style="border:1px solid #30363d;padding:1px" />
+              </div>
+              <div class="flex-1">
+                <label class="text-xs text-gh-muted mb-0.5 block">Stroke</label>
+                <input type="color" class="w-full h-7 rounded cursor-pointer" x-model="textLabels[selectedIdx].strokeColor" @input="renderCanvas()" style="border:1px solid #30363d;padding:1px" />
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Size</label><span class="text-xs font-mono text-gh-accent" x-text="textLabels[selectedIdx].size+'px'"></span></div>
+              <input type="range" min="8" max="300" class="gh-range" x-model.number="textLabels[selectedIdx].size" @input="renderCanvas()" />
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Rotation</label><span class="text-xs font-mono text-gh-accent" x-text="textLabels[selectedIdx].rotation+'°'"></span></div>
+              <input type="range" min="-180" max="180" class="gh-range" x-model.number="textLabels[selectedIdx].rotation" @input="renderCanvas()" />
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Opacity</label><span class="text-xs font-mono text-gh-accent" x-text="Math.round(textLabels[selectedIdx].opacity*100)+'%'"></span></div>
+              <input type="range" min="0.05" max="1" step="0.05" class="gh-range" x-model.number="textLabels[selectedIdx].opacity" @input="renderCanvas()" />
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Stroke W</label><span class="text-xs font-mono text-gh-accent" x-text="textLabels[selectedIdx].strokeWidth+'px'"></span></div>
+              <input type="range" min="0" max="15" class="gh-range" x-model.number="textLabels[selectedIdx].strokeWidth" @input="renderCanvas()" />
+            </div>
+            <select class="gh-select text-xs" x-model="textLabels[selectedIdx].font" @change="renderCanvas()">
+              <option value="Impact">Impact</option>
+              <option value="Arial Black">Arial Black</option>
+              <option value="Comic Sans MS">Comic Sans MS</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Courier New">Courier New</option>
+            </select>
+          </div>
+        </template>
+      </div>
+
+      <!-- Selected sticker controls -->
+      <div x-show="selectedType==='sticker' && selectedIdx>=0 && selectedIdx<stickers.length" class="mb-4 p-2 rounded-md bg-gh-overlay border border-gh-border">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gh-text">Selected Sticker</span>
+          <button class="text-xs text-gh-muted hover:text-red-400" @click="deleteSelected()">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+        <template x-if="selectedType==='sticker' && selectedIdx>=0 && selectedIdx<stickers.length">
+          <div class="space-y-2">
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Size</label><span class="text-xs font-mono text-gh-accent" x-text="stickers[selectedIdx].size+'px'"></span></div>
+              <input type="range" min="16" max="300" class="gh-range" x-model.number="stickers[selectedIdx].size" @input="renderCanvas()" />
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Rotation</label><span class="text-xs font-mono text-gh-accent" x-text="stickers[selectedIdx].rotation+'°'"></span></div>
+              <input type="range" min="-180" max="180" class="gh-range" x-model.number="stickers[selectedIdx].rotation" @input="renderCanvas()" />
+            </div>
+            <div>
+              <div class="flex justify-between"><label class="text-xs text-gh-muted">Opacity</label><span class="text-xs font-mono text-gh-accent" x-text="Math.round(stickers[selectedIdx].opacity*100)+'%'"></span></div>
+              <input type="range" min="0.05" max="1" step="0.05" class="gh-range" x-model.number="stickers[selectedIdx].opacity" @input="renderCanvas()" />
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Text labels list -->
+      <div x-show="textLabels.length > 0" class="mb-4">
+        <span class="panel-label">Text Layers (<span x-text="textLabels.length"></span>)</span>
+        <div class="space-y-1">
+          <template x-for="(lbl, idx) in textLabels" :key="lbl.id">
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs"
+              :class="selectedType==='label'&&selectedIdx===idx?'bg-gh-overlay border border-gh-accent':'bg-gh-overlay border border-gh-border hover:border-gh-muted'"
+              @click="selectedType='label';selectedIdx=idx">
+              <span class="text-lg leading-none" style="font-family:serif" x-text="lbl.text.slice(0,3)+'…'"></span>
+              <span class="flex-1 truncate text-gh-muted" x-text="lbl.text"></span>
+              <button class="text-gh-muted hover:text-red-400 shrink-0" @click.stop="removeTextLabel(idx)">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Stickers list -->
+      <div x-show="stickers.length > 0" class="mb-4">
+        <span class="panel-label">Sticker Layers (<span x-text="stickers.length"></span>)</span>
+        <div class="space-y-1">
+          <template x-for="(s, idx) in stickers" :key="idx">
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs"
+              :class="selectedType==='sticker'&&selectedIdx===idx?'bg-gh-overlay border border-gh-accent':'bg-gh-overlay border border-gh-border hover:border-gh-muted'"
+              @click="selectedType='sticker';selectedIdx=idx">
+              <span class="text-lg leading-none" x-text="s.text"></span>
+              <span class="flex-1 text-gh-muted" x-text="s.size+'px'"></span>
+              <button class="text-gh-muted hover:text-red-400 shrink-0" @click.stop="removeSticker(idx)">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div x-show="!hasImage || (textLabels.length===0 && stickers.length===0)" class="text-xs text-gh-muted text-center py-4">
+        Load an image and add text layers or stickers
+      </div>
+    </div>
+
+    <!-- ── FILTERS TAB ── -->
     <div x-show="rightTab==='filters'" x-cloak>
       <template x-for="f in filterDefs" :key="f.key">
         <div class="mb-3">
@@ -328,7 +593,7 @@
       </div>
     </div>
 
-    <!-- EXPORT TAB -->
+    <!-- ── EXPORT TAB ── -->
     <div x-show="rightTab==='export'" x-cloak>
       <div class="mb-3">
         <span class="panel-label">Format</span>
@@ -353,7 +618,7 @@
       <div class="mb-3">
         <span class="panel-label">Output</span>
         <div class="rounded-md bg-gh-overlay border border-gh-border p-2 text-xs space-y-1 text-gh-muted" style="font-family:monospace">
-          <div class="flex justify-between"><span>Size</span><span class="text-gh-text" x-text="(resize.w||0)+'x'+(resize.h||0)+'px'"></span></div>
+          <div class="flex justify-between"><span>Size</span><span class="text-gh-text" x-text="(resize.w||0)+'x'+(actualCanvasH||0)+'px'"></span></div>
           <div class="flex justify-between"><span>Format</span><span class="text-gh-text" x-text="exportFmt.split('/')[1].toUpperCase()"></span></div>
         </div>
       </div>
@@ -372,20 +637,21 @@
 </div>
 
 <!-- STICKER PANEL -->
-<div x-show="showStickerPanel" x-cloak class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.5)" @click.self="showStickerPanel=false">
-  <div class="bg-gh-surface border border-gh-border rounded-xl shadow-2xl w-80 p-4">
+<div x-show="showStickerPanel" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style="background:rgba(0,0,0,.5)" @click.self="showStickerPanel=false">
+  <div class="bg-gh-surface border border-gh-border rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:w-80 p-4 max-h-96 overflow-y-auto">
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold">Add Sticker / Emoji</h3>
       <button class="text-gh-muted hover:text-gh-text" @click="showStickerPanel=false">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
       </button>
     </div>
-    <div class="grid grid-cols-7 gap-1 max-h-48 overflow-y-auto">
+    <div class="grid grid-cols-8 gap-1 mb-3">
       <template x-for="s in stickerList" :key="s">
         <button class="text-2xl rounded hover:bg-gh-overlay p-1 transition-colors" @click="addSticker(s);showStickerPanel=false" x-text="s"></button>
       </template>
     </div>
-    <div class="mt-3">
+    <div class="mt-3 border-t border-gh-border pt-3">
+      <p class="text-xs text-gh-muted mb-2">Custom text or emoji:</p>
       <input type="text" class="gh-input text-sm" placeholder="Custom emoji / text..." x-model="customSticker" @keydown.enter="addSticker(customSticker);showStickerPanel=false;customSticker=''" />
       <button class="gh-btn gh-btn-accent text-xs w-full mt-2" @click="addSticker(customSticker);showStickerPanel=false;customSticker=''">Add to Canvas</button>
     </div>
@@ -410,11 +676,38 @@ function memeEditor() {
     sourceImg: null,
     transforms: { flipH: false, flipV: false, rotation: 0 },
     resize: { w: 0, h: 0, lock: true, origW: 0, origH: 0 },
+    actualCanvasH: 0,
+
+    // Text layers
     topText:    { content:'', font:'Impact', size:60, color:'#ffffff', strokeColor:'#000000', strokeWidth:4, align:'center', yOffset:0, allCaps:true },
     bottomText: { content:'', font:'Impact', size:60, color:'#ffffff', strokeColor:'#000000', strokeWidth:4, align:'center', yOffset:0, allCaps:true },
     activeTextLayer: 'top',
+
+    // Band mode
+    bandMode: false,
+    topBandH: 80,
+    bottomBandH: 80,
+    topBandBg: '#ffffff',
+    bottomBandBg: '#ffffff',
+
+    // Stickers
     stickers: [],
-    drag: { active:false, startX:0, startY:0, stickerIdx:-1 },
+
+    // Custom movable text labels
+    textLabels: [],
+    newLabelText: '',
+    _labelCounter: 0,
+
+    // Selection
+    selectedType: null,  // 'sticker' | 'label' | null
+    selectedIdx: -1,
+
+    // Drag state (stickers + labels)
+    drag: { active:false, startX:0, startY:0, idx:-1, type:null },
+
+    // Figma-like resize drag
+    resizeDrag: { active:false, handle:'', startX:0, startY:0, startW:0, startH:0 },
+
     filters: { brightness:100, contrast:100, saturation:100, hue:0, blur:0, sepia:0, grayscale:0, opacity:100 },
     filterDefs: [
       { key:'brightness', label:'Brightness', min:0,   max:200, step:1 },
@@ -438,7 +731,13 @@ function memeEditor() {
     exportQuality: 0.85,
     exportName: 'meme',
     toast: { visible:false, message:'', timer:null },
+    mobilePanelOpen: false,
+
     stickerList: ['😂','🤣','💀','😭','😩','🥺','😤','🤔','🤯','😳','🙄','😑','🤡','👀','💯','🔥','✅','❌','⚠️','💥','🎉','👍','👎','🤦','🤷','💪','👏','🫡','😎','🥴','🤮','🤢','😏','😈','👻','🤖','👾','🎭','🍕','🍔','💸','💰','🚀','🌈','⚡','🎯','🏆','🎪'],
+
+    // Undo/Redo
+    history: [],
+    historyIdx: -1,
 
     get activeText() {
       return this.activeTextLayer === 'top' ? this.topText : this.bottomText;
@@ -462,8 +761,12 @@ function memeEditor() {
         const k = e.key.toLowerCase();
         if (k === 'v') this.tool = 'select';
         if (k === 't') { this.tool = 'text'; this.rightTab = 'text'; }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'z') { e.preventDefault(); this.undo(); }
+        if ((e.ctrlKey || e.metaKey) && (e.shiftKey && k === 'z' || k === 'y')) { e.preventDefault(); this.redo(); }
         if ((e.ctrlKey || e.metaKey) && k === 's') { e.preventDefault(); this.downloadImage(); }
         if ((e.ctrlKey || e.metaKey) && k === 'v') { e.preventDefault(); this.pasteFromClipboard(); }
+        if (k === 'delete' || k === 'backspace') { this.deleteSelected(); }
+        if (k === 'escape') { this.selectedType = null; this.selectedIdx = -1; }
       });
       document.addEventListener('paste', (e) => {
         const items = e.clipboardData && e.clipboardData.items;
@@ -478,6 +781,8 @@ function memeEditor() {
       });
       this.loadFromStorage();
     },
+
+    // ── Image loading ──
 
     loadImageFile(e) {
       const f = e.target.files && e.target.files[0];
@@ -507,8 +812,13 @@ function memeEditor() {
         this.resize.w     = img.naturalWidth;
         this.resize.h     = img.naturalHeight;
         this.stickers     = [];
+        this.textLabels   = [];
+        this.selectedType = null;
+        this.selectedIdx  = -1;
         this.transforms   = { flipH:false, flipV:false, rotation:0 };
-        this.$nextTick(() => this.renderCanvas());
+        this.history      = [];
+        this.historyIdx   = -1;
+        this.$nextTick(() => { this.renderCanvas(); this.fitZoom(); this.pushHistory(); });
         this.updateInfo();
       };
       img.src = dataURL;
@@ -536,37 +846,94 @@ function memeEditor() {
       }
     },
 
+    // ── Canvas rendering ──
+
     renderCanvas() {
       if (!this.hasImage || !this.sourceImg) return;
       const canvas = document.getElementById('mainCanvas');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const W = Math.max(1, this.resize.w);
-      const H = Math.max(1, this.resize.h);
-      canvas.width  = W;
-      canvas.height = H;
+      const imgH = Math.max(1, this.resize.h);
 
-      ctx.save();
-      ctx.filter = this.buildFilter();
-      ctx.translate(W/2, H/2);
-      ctx.rotate(this.transforms.rotation * Math.PI / 180);
-      ctx.scale(this.transforms.flipH ? -1 : 1, this.transforms.flipV ? -1 : 1);
-      ctx.drawImage(this.sourceImg, -W/2, -H/2, W, H);
-      ctx.restore();
+      if (this.bandMode) {
+        const totalH = imgH + this.topBandH + this.bottomBandH;
+        canvas.width  = W;
+        canvas.height = totalH;
+        this.actualCanvasH = totalH;
 
+        // Top band
+        ctx.fillStyle = this.topBandBg;
+        ctx.fillRect(0, 0, W, this.topBandH);
+
+        // Image
+        ctx.save();
+        ctx.filter = this.buildFilter();
+        ctx.translate(W/2, this.topBandH + imgH/2);
+        ctx.rotate(this.transforms.rotation * Math.PI / 180);
+        ctx.scale(this.transforms.flipH ? -1 : 1, this.transforms.flipV ? -1 : 1);
+        ctx.drawImage(this.sourceImg, -W/2, -imgH/2, W, imgH);
+        ctx.restore();
+
+        // Bottom band
+        ctx.filter = 'none';
+        ctx.fillStyle = this.bottomBandBg;
+        ctx.fillRect(0, this.topBandH + imgH, W, this.bottomBandH);
+
+        // Text in bands
+        ctx.filter = 'none';
+        this.drawMemeTextBand(ctx, W, imgH);
+      } else {
+        canvas.width  = W;
+        canvas.height = imgH;
+        this.actualCanvasH = imgH;
+
+        ctx.save();
+        ctx.filter = this.buildFilter();
+        ctx.translate(W/2, imgH/2);
+        ctx.rotate(this.transforms.rotation * Math.PI / 180);
+        ctx.scale(this.transforms.flipH ? -1 : 1, this.transforms.flipV ? -1 : 1);
+        ctx.drawImage(this.sourceImg, -W/2, -imgH/2, W, imgH);
+        ctx.restore();
+
+        ctx.filter = 'none';
+        this.drawMemeText(ctx, W, imgH);
+      }
+
+      // Stickers (always on top of image, positioned in image space)
       ctx.filter = 'none';
+      const imgOffsetY = this.bandMode ? this.topBandH : 0;
       for (const s of this.stickers) {
         ctx.save();
         ctx.font = s.size + 'px serif';
         ctx.globalAlpha = s.opacity;
-        ctx.translate(s.x, s.y);
+        ctx.translate(s.x, s.y + imgOffsetY);
         ctx.rotate(s.rotation * Math.PI / 180);
-        ctx.fillText(s.text, 0, 0);
+        ctx.fillText(s.text, -s.size/2, s.size/2);
         ctx.restore();
       }
 
-      ctx.filter = 'none';
-      this.drawMemeText(ctx, W, H);
+      // Text labels
+      for (const lbl of this.textLabels) {
+        ctx.save();
+        const fontSize = Math.max(8, lbl.size);
+        ctx.font = '900 ' + fontSize + 'px ' + lbl.font;
+        ctx.globalAlpha = lbl.opacity;
+        ctx.lineWidth = lbl.strokeWidth;
+        ctx.lineJoin = 'round';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.translate(lbl.x, lbl.y + imgOffsetY);
+        ctx.rotate(lbl.rotation * Math.PI / 180);
+        if (lbl.strokeWidth > 0) {
+          ctx.strokeStyle = lbl.strokeColor;
+          ctx.strokeText(lbl.text, 0, 0);
+        }
+        ctx.fillStyle = lbl.color;
+        ctx.fillText(lbl.text, 0, 0);
+        ctx.restore();
+      }
+
       this.updateInfo();
       this.debouncedSave();
     },
@@ -579,13 +946,14 @@ function memeEditor() {
         'saturate('+f.saturation+'%)',
         'hue-rotate('+f.hue+'deg)',
       ];
-      if (f.blur     > 0)   parts.push('blur('+f.blur+'px)');
-      if (f.sepia    > 0)   parts.push('sepia('+f.sepia+'%)');
+      if (f.blur      > 0)  parts.push('blur('+f.blur+'px)');
+      if (f.sepia     > 0)  parts.push('sepia('+f.sepia+'%)');
       if (f.grayscale > 0)  parts.push('grayscale('+f.grayscale+'%)');
-      if (f.opacity  < 100) parts.push('opacity('+f.opacity+'%)');
+      if (f.opacity   < 100) parts.push('opacity('+f.opacity+'%)');
       return parts.join(' ');
     },
 
+    // Overlay mode text (drawn on the image)
     drawMemeText(ctx, W, H) {
       const drawLayer = (layer, isTop) => {
         if (!layer.content) return;
@@ -596,15 +964,7 @@ function memeEditor() {
         ctx.lineWidth  = layer.strokeWidth;
         ctx.lineJoin   = 'round';
         const maxW = W - 40;
-        const words = text.split(' ');
-        const lines = [];
-        let cur = '';
-        for (const w of words) {
-          const test = cur ? cur + ' ' + w : w;
-          if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
-          else cur = test;
-        }
-        if (cur) lines.push(cur);
+        const lines = this.wrapText(ctx, text, maxW);
         const lh = fontSize * 1.2;
         let y0;
         if (isTop)  y0 = 10 + fontSize + layer.yOffset;
@@ -622,14 +982,62 @@ function memeEditor() {
       drawLayer(this.bottomText, false);
     },
 
-    flipHorizontal() { if (!this.hasImage) return; this.transforms.flipH = !this.transforms.flipH; this.renderCanvas(); },
-    flipVertical()   { if (!this.hasImage) return; this.transforms.flipV = !this.transforms.flipV; this.renderCanvas(); },
+    // Band mode text (drawn in color strips)
+    drawMemeTextBand(ctx, W, imgH) {
+      const drawBand = (layer, bandY, bandH) => {
+        if (!layer.content) return;
+        const text = layer.allCaps ? layer.content.toUpperCase() : layer.content;
+        // Fit font to band
+        const maxFontSize = Math.min(layer.size, bandH * 0.7);
+        const fontSize = Math.max(10, maxFontSize);
+        ctx.font = '900 ' + fontSize + 'px ' + layer.font;
+        ctx.textAlign  = layer.align;
+        ctx.lineWidth  = layer.strokeWidth;
+        ctx.lineJoin   = 'round';
+        const maxW = W - 40;
+        const lines = this.wrapText(ctx, text, maxW);
+        const lh = fontSize * 1.15;
+        const totalTextH = lines.length * lh;
+        let y0 = bandY + (bandH - totalTextH) / 2 + fontSize + layer.yOffset;
+        const xp = layer.align === 'left' ? 20 : layer.align === 'right' ? W - 20 : W / 2;
+        for (let i = 0; i < lines.length; i++) {
+          const y = y0 + i * lh;
+          if (layer.strokeWidth > 0) {
+            ctx.strokeStyle = layer.strokeColor;
+            ctx.strokeText(lines[i], xp, y);
+          }
+          ctx.fillStyle = layer.color;
+          ctx.fillText(lines[i], xp, y);
+        }
+      };
+      drawBand(this.topText,    0,                          this.topBandH);
+      drawBand(this.bottomText, this.topBandH + imgH,       this.bottomBandH);
+    },
+
+    wrapText(ctx, text, maxW) {
+      const words = text.split(' ');
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? cur + ' ' + w : w;
+        if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+        else cur = test;
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    },
+
+    // ── Transforms ──
+
+    flipHorizontal() { if (!this.hasImage) return; this.transforms.flipH = !this.transforms.flipH; this.renderCanvas(); this.pushHistory(); },
+    flipVertical()   { if (!this.hasImage) return; this.transforms.flipV = !this.transforms.flipV; this.renderCanvas(); this.pushHistory(); },
 
     rotateImage(deg) {
       if (!this.hasImage) return;
       this.transforms.rotation = ((this.transforms.rotation + deg) % 360 + 360) % 360;
       if (Math.abs(deg) === 90) { const t = this.resize.w; this.resize.w = this.resize.h; this.resize.h = t; }
       this.renderCanvas();
+      this.pushHistory();
     },
 
     onResizeInput(changed) {
@@ -642,55 +1050,276 @@ function memeEditor() {
     applyResize() {
       if (!this.hasImage) return;
       this.renderCanvas();
+      this.pushHistory();
       this.showToast('Resized to ' + this.resize.w + 'x' + this.resize.h);
     },
+
+    // ── Figma-like resize handles ──
+
+    startResizeDrag(e, handle) {
+      if (!this.hasImage) return;
+      this.resizeDrag = {
+        active: true,
+        handle,
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: this.resize.w,
+        startH: this.resize.h,
+      };
+      e.preventDefault();
+    },
+
+    startResizeTouchDrag(e, handle) {
+      if (!this.hasImage || !e.touches[0]) return;
+      this.resizeDrag = {
+        active: true,
+        handle,
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        startW: this.resize.w,
+        startH: this.resize.h,
+      };
+    },
+
+    onWindowMouseMove(e) {
+      if (this.resizeDrag.active) {
+        this._doResizeDrag(e.clientX, e.clientY, e.shiftKey);
+      }
+    },
+
+    onWindowMouseUp(e) {
+      if (this.resizeDrag.active) {
+        this.resizeDrag.active = false;
+        this.renderCanvas();
+        this.pushHistory();
+        this.showToast('Canvas: ' + this.resize.w + 'x' + this.resize.h + 'px');
+      }
+    },
+
+    onWindowTouchMove(e) {
+      if (this.resizeDrag.active && e.touches[0]) {
+        this._doResizeDrag(e.touches[0].clientX, e.touches[0].clientY, false);
+      }
+    },
+
+    onWindowTouchEnd(e) {
+      if (this.resizeDrag.active) {
+        this.resizeDrag.active = false;
+        this.renderCanvas();
+        this.pushHistory();
+      }
+    },
+
+    _doResizeDrag(clientX, clientY, shiftKey) {
+      const scale = this.zoom / 100;
+      const dx = (clientX - this.resizeDrag.startX) / scale;
+      const dy = (clientY - this.resizeDrag.startY) / scale;
+      const h  = this.resizeDrag.handle;
+      let newW = this.resizeDrag.startW;
+      let newH = this.resizeDrag.startH;
+
+      if (h.includes('e'))  newW = Math.max(10, this.resizeDrag.startW + dx);
+      if (h.includes('w'))  newW = Math.max(10, this.resizeDrag.startW - dx);
+      if (h.includes('s'))  newH = Math.max(10, this.resizeDrag.startH + dy);
+      if (h.includes('n'))  newH = Math.max(10, this.resizeDrag.startH - dy);
+
+      // Lock aspect ratio unless only one axis is being resized
+      const isCorner = h.length === 2;
+      const lockAR = this.resize.lock && isCorner || shiftKey;
+      if (lockAR) {
+        const ratio = this.resizeDrag.startW / this.resizeDrag.startH;
+        if (Math.abs(newW - this.resizeDrag.startW) >= Math.abs(newH - this.resizeDrag.startH)) {
+          newH = Math.round(newW / ratio);
+        } else {
+          newW = Math.round(newH * ratio);
+        }
+      }
+
+      this.resize.w = Math.round(newW);
+      this.resize.h = Math.round(newH);
+      this.renderCanvas();
+    },
+
+    // ── Stickers ──
+
+    addSticker(text) {
+      if (!this.hasImage || !text) return;
+      const canvas = document.getElementById('mainCanvas');
+      const cx = canvas ? canvas.width  / 2 : 100;
+      const cy = canvas ? this.resize.h / 2 : 100; // position in image space
+      this.stickers.push({ text, x: cx, y: cy, size:64, rotation:0, opacity:1 });
+      this.selectedType = 'sticker';
+      this.selectedIdx  = this.stickers.length - 1;
+      this.rightTab     = 'layers';
+      this.renderCanvas();
+      this.pushHistory();
+    },
+
+    removeSticker(idx) {
+      this.stickers.splice(idx, 1);
+      if (this.selectedType === 'sticker' && this.selectedIdx >= this.stickers.length) {
+        this.selectedIdx = this.stickers.length - 1;
+      }
+      this.renderCanvas();
+      this.pushHistory();
+    },
+
+    // ── Text labels ──
+
+    addTextLabel() {
+      if (!this.hasImage || !this.newLabelText.trim()) return;
+      const canvas = document.getElementById('mainCanvas');
+      const cx = canvas ? canvas.width  / 2 : 100;
+      const cy = canvas ? this.resize.h / 2 : 100;
+      this.textLabels.push({
+        id: ++this._labelCounter,
+        text: this.newLabelText.trim(),
+        x: cx, y: cy,
+        font: 'Impact', size: 60, color: '#ffffff',
+        strokeColor: '#000000', strokeWidth: 3,
+        rotation: 0, opacity: 1,
+      });
+      this.selectedType = 'label';
+      this.selectedIdx  = this.textLabels.length - 1;
+      this.newLabelText = '';
+      this.renderCanvas();
+      this.pushHistory();
+      this.showToast('Text label added — drag to reposition');
+    },
+
+    removeTextLabel(idx) {
+      this.textLabels.splice(idx, 1);
+      if (this.selectedType === 'label' && this.selectedIdx >= this.textLabels.length) {
+        this.selectedIdx = this.textLabels.length - 1;
+      }
+      this.renderCanvas();
+      this.pushHistory();
+    },
+
+    deleteSelected() {
+      if (this.selectedType === 'sticker' && this.selectedIdx >= 0) {
+        this.removeSticker(this.selectedIdx);
+        this.selectedType = null; this.selectedIdx = -1;
+      } else if (this.selectedType === 'label' && this.selectedIdx >= 0) {
+        this.removeTextLabel(this.selectedIdx);
+        this.selectedType = null; this.selectedIdx = -1;
+      }
+    },
+
+    // ── Canvas interaction (mouse) ──
+
+    onCanvasAreaClick(e) {
+      // Deselect on clicking the checkerboard background (not the canvas)
+      if (e.target === document.getElementById('canvasMain')) {
+        this.selectedType = null;
+        this.selectedIdx  = -1;
+      }
+    },
+
+    onCanvasMouseDown(e) {
+      const { x, y } = this._canvasCoords(e.clientX, e.clientY);
+      const imgOffsetY = this.bandMode ? this.topBandH : 0;
+
+      // Hit-test text labels first (top of z-order)
+      for (let i = this.textLabels.length - 1; i >= 0; i--) {
+        const lbl = this.textLabels[i];
+        const lx = lbl.x, ly = lbl.y + imgOffsetY;
+        const half = (lbl.size / 2) * 1.5;
+        if (Math.abs(x - lx) < half && Math.abs(y - ly) < half) {
+          this.selectedType = 'label';
+          this.selectedIdx  = i;
+          this.drag = { active:true, startX:x-lbl.x, startY:y-(lbl.y+imgOffsetY), idx:i, type:'label' };
+          this.rightTab = 'layers';
+          return;
+        }
+      }
+      // Hit-test stickers
+      for (let i = this.stickers.length - 1; i >= 0; i--) {
+        const s = this.stickers[i];
+        const sx = s.x, sy = s.y + imgOffsetY;
+        if (Math.abs(x - sx) < s.size / 2 + 10 && Math.abs(y - sy) < s.size / 2 + 10) {
+          this.selectedType = 'sticker';
+          this.selectedIdx  = i;
+          this.drag = { active:true, startX:x-s.x, startY:y-(s.y+imgOffsetY), idx:i, type:'sticker' };
+          this.rightTab = 'layers';
+          return;
+        }
+      }
+      // Click on empty canvas — deselect
+      this.selectedType = null;
+      this.selectedIdx  = -1;
+    },
+
+    onCanvasMouseMove(e) {
+      if (!this.drag.active) return;
+      const { x, y } = this._canvasCoords(e.clientX, e.clientY);
+      const imgOffsetY = this.bandMode ? this.topBandH : 0;
+      if (this.drag.type === 'label') {
+        const lbl = this.textLabels[this.drag.idx];
+        if (lbl) { lbl.x = x - this.drag.startX; lbl.y = y - this.drag.startY - imgOffsetY; this.renderCanvas(); }
+      } else if (this.drag.type === 'sticker') {
+        const s = this.stickers[this.drag.idx];
+        if (s) { s.x = x - this.drag.startX; s.y = y - this.drag.startY - imgOffsetY; this.renderCanvas(); }
+      }
+    },
+
+    onCanvasMouseUp() {
+      if (this.drag.active) {
+        this.drag.active = false;
+        this.pushHistory();
+      }
+    },
+
+    onCanvasMouseLeave() {
+      // Don't stop drag on leave — handled by window mouseup
+    },
+
+    // ── Canvas interaction (touch) ──
+
+    onCanvasTouchStart(e) {
+      if (!e.touches[0]) return;
+      const t = e.touches[0];
+      // Synthesize a mousedown-equivalent
+      const synth = { clientX: t.clientX, clientY: t.clientY };
+      this.onCanvasMouseDown(synth);
+    },
+
+    onCanvasTouchMove(e) {
+      if (!e.touches[0] || !this.drag.active) return;
+      const t = e.touches[0];
+      this.onCanvasMouseMove({ clientX: t.clientX, clientY: t.clientY });
+    },
+
+    onCanvasTouchEnd() {
+      this.onCanvasMouseUp();
+    },
+
+    _canvasCoords(clientX, clientY) {
+      const canvas = document.getElementById('mainCanvas');
+      const rect   = canvas.getBoundingClientRect();
+      const scale  = this.zoom / 100;
+      return {
+        x: (clientX - rect.left)  / scale,
+        y: (clientY - rect.top)   / scale,
+      };
+    },
+
+    // ── Filters ──
 
     resetFilters() {
       this.filters = { brightness:100, contrast:100, saturation:100, hue:0, blur:0, sepia:0, grayscale:0, opacity:100 };
       this.renderCanvas();
+      this.pushHistory();
     },
 
     applyPreset(p) {
       this.filters = Object.assign({}, p.f);
       this.renderCanvas();
+      this.pushHistory();
       this.showToast('Preset: ' + p.name);
     },
 
-    addSticker(text) {
-      if (!this.hasImage || !text) return;
-      const canvas = document.getElementById('mainCanvas');
-      this.stickers.push({ text, x: canvas ? canvas.width/2 : 100, y: canvas ? canvas.height/2 : 100, size:64, rotation:0, opacity:1 });
-      this.renderCanvas();
-    },
-
-    onCanvasMouseDown(e) {
-      if (!this.stickers.length) return;
-      const canvas = document.getElementById('mainCanvas');
-      const rect   = canvas.getBoundingClientRect();
-      const scale  = (this.zoom / 100);
-      const x      = (e.clientX - rect.left)  / scale;
-      const y      = (e.clientY - rect.top)   / scale;
-      for (let i = this.stickers.length - 1; i >= 0; i--) {
-        const s = this.stickers[i];
-        if (Math.abs(x - s.x) < s.size / 2 && Math.abs(y - s.y) < s.size / 2) {
-          this.drag = { active:true, startX:x-s.x, startY:y-s.y, stickerIdx:i };
-          return;
-        }
-      }
-    },
-
-    onCanvasMouseMove(e) {
-      if (!this.drag.active) return;
-      const canvas = document.getElementById('mainCanvas');
-      const rect   = canvas.getBoundingClientRect();
-      const scale  = (this.zoom / 100);
-      const x      = (e.clientX - rect.left)  / scale;
-      const y      = (e.clientY - rect.top)   / scale;
-      const s      = this.stickers[this.drag.stickerIdx];
-      if (s) { s.x = x - this.drag.startX; s.y = y - this.drag.startY; this.renderCanvas(); }
-    },
-
-    onCanvasMouseUp() { this.drag.active = false; this.drag.stickerIdx = -1; },
+    // ── Export ──
 
     downloadImage() {
       if (!this.hasImage) return;
@@ -715,11 +1344,83 @@ function memeEditor() {
       } catch(e) { this.showToast('Copy not supported — use Download instead'); }
     },
 
+    // ── Zoom ──
+
+    fitZoom() {
+      const main = document.getElementById('canvasMain');
+      const canvas = document.getElementById('mainCanvas');
+      if (!main || !canvas) return;
+      const mw = main.clientWidth  - 40;
+      const mh = main.clientHeight - 80;
+      const cw = canvas.width  || this.resize.w;
+      const ch = canvas.height || this.resize.h;
+      if (!cw || !ch) return;
+      this.zoom = Math.min(100, Math.round(Math.min(mw/cw, mh/ch) * 100));
+    },
+
+    // ── Undo / Redo ──
+
+    pushHistory() {
+      const state = {
+        topText:    JSON.parse(JSON.stringify(this.topText)),
+        bottomText: JSON.parse(JSON.stringify(this.bottomText)),
+        stickers:   JSON.parse(JSON.stringify(this.stickers)),
+        textLabels: JSON.parse(JSON.stringify(this.textLabels)),
+        filters:    JSON.parse(JSON.stringify(this.filters)),
+        transforms: JSON.parse(JSON.stringify(this.transforms)),
+        resize:     JSON.parse(JSON.stringify(this.resize)),
+        bandMode:   this.bandMode,
+        topBandH:   this.topBandH,
+        bottomBandH: this.bottomBandH,
+        topBandBg:  this.topBandBg,
+        bottomBandBg: this.bottomBandBg,
+      };
+      // Discard future history
+      this.history = this.history.slice(0, this.historyIdx + 1);
+      this.history.push(state);
+      if (this.history.length > 30) this.history.shift();
+      else this.historyIdx++;
+    },
+
+    _restoreState(state) {
+      this.topText     = JSON.parse(JSON.stringify(state.topText));
+      this.bottomText  = JSON.parse(JSON.stringify(state.bottomText));
+      this.stickers    = JSON.parse(JSON.stringify(state.stickers));
+      this.textLabels  = JSON.parse(JSON.stringify(state.textLabels));
+      this.filters     = JSON.parse(JSON.stringify(state.filters));
+      this.transforms  = JSON.parse(JSON.stringify(state.transforms));
+      this.resize      = JSON.parse(JSON.stringify(state.resize));
+      this.bandMode    = state.bandMode;
+      this.topBandH    = state.topBandH;
+      this.bottomBandH = state.bottomBandH;
+      this.topBandBg   = state.topBandBg;
+      this.bottomBandBg = state.bottomBandBg;
+      this.selectedType = null;
+      this.selectedIdx  = -1;
+      this.renderCanvas();
+    },
+
+    undo() {
+      if (this.historyIdx <= 0) { this.showToast('Nothing to undo'); return; }
+      this.historyIdx--;
+      this._restoreState(this.history[this.historyIdx]);
+      this.showToast('Undo');
+    },
+
+    redo() {
+      if (this.historyIdx >= this.history.length - 1) { this.showToast('Nothing to redo'); return; }
+      this.historyIdx++;
+      this._restoreState(this.history[this.historyIdx]);
+      this.showToast('Redo');
+    },
+
+    // ── Persistence ──
+
     _saveTimer: null,
 
     debouncedSave() {
       clearTimeout(this._saveTimer);
-      this._saveTimer = setTimeout(() => this.saveToStorage(), 1000);
+      this._saveTimer = setTimeout(() => this.saveToStorage(), 1200);
     },
 
     saveToStorage() {
@@ -733,6 +1434,8 @@ function memeEditor() {
         localStorage.setItem('mf_resize',     JSON.stringify({ w:this.resize.w, h:this.resize.h, origW:this.resize.origW, origH:this.resize.origH }));
         localStorage.setItem('mf_stickers',   JSON.stringify(this.stickers));
         localStorage.setItem('mf_transforms', JSON.stringify(this.transforms));
+        localStorage.setItem('mf_labels',     JSON.stringify(this.textLabels));
+        localStorage.setItem('mf_band',       JSON.stringify({ bandMode:this.bandMode, topBandH:this.topBandH, bottomBandH:this.bottomBandH, topBandBg:this.topBandBg, bottomBandBg:this.bottomBandBg }));
       } catch(e) { /* quota exceeded */ }
     },
 
@@ -746,19 +1449,25 @@ function memeEditor() {
         const rsz = localStorage.getItem('mf_resize');
         const stk = localStorage.getItem('mf_stickers');
         const trn = localStorage.getItem('mf_transforms');
+        const lbl = localStorage.getItem('mf_labels');
+        const bnd = localStorage.getItem('mf_band');
         if (top) { try { this.topText    = JSON.parse(top); } catch(e){} }
         if (bot) { try { this.bottomText = JSON.parse(bot); } catch(e){} }
         if (flt) { try { this.filters    = JSON.parse(flt); } catch(e){} }
         if (rsz) { try { const r = JSON.parse(rsz); this.resize = Object.assign(this.resize, r); } catch(e){} }
         if (stk) { try { this.stickers   = JSON.parse(stk); } catch(e){} }
         if (trn) { try { this.transforms = JSON.parse(trn); } catch(e){} }
+        if (lbl) { try { const parsed = JSON.parse(lbl); this.textLabels = parsed; this._labelCounter = parsed.length; } catch(e){} }
+        if (bnd) { try { const b = JSON.parse(bnd); Object.assign(this, b); } catch(e){} }
         this.loadImageFromDataURL(img);
         this.showToast('Session restored');
       } catch(e) {}
     },
 
+    // ── Misc ──
+
     updateInfo() {
-      this.imgInfo = (this.resize.w||0) + 'x' + (this.resize.h||0) + 'px';
+      this.imgInfo = (this.resize.w||0) + 'x' + (this.actualCanvasH||this.resize.h||0) + 'px';
     },
 
     formatBytes(b) {
@@ -777,11 +1486,13 @@ function memeEditor() {
     resetAll() {
       if (!this.hasImage) return;
       if (!confirm('Clear current image and all edits?')) return;
-      this.hasImage = false; this.sourceImg = null; this.stickers = [];
+      this.hasImage = false; this.sourceImg = null; this.stickers = []; this.textLabels = [];
       this.topText.content = ''; this.bottomText.content = '';
       this.resetFilters();
       this.transforms = { flipH:false, flipV:false, rotation:0 };
-      ['mf_img','mf_top','mf_bot','mf_filters','mf_resize','mf_stickers','mf_transforms'].forEach(k => localStorage.removeItem(k));
+      this.history = []; this.historyIdx = -1;
+      this.selectedType = null; this.selectedIdx = -1;
+      ['mf_img','mf_top','mf_bot','mf_filters','mf_resize','mf_stickers','mf_transforms','mf_labels','mf_band'].forEach(k => localStorage.removeItem(k));
     },
   };
 }
