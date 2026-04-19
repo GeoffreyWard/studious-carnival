@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MemeForge &mdash; In-Browser Meme Editor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -198,7 +198,7 @@
     </div>
     <div class="text-center">
       <p class="text-gh-text font-medium">Drop an image here</p>
-      <p class="text-gh-muted text-sm mt-1">or paste with <kbd>Ctrl+V</kbd></p>
+      <p class="text-gh-muted text-sm mt-1">or paste with <kbd x-text="isMac?'⌘V':'Ctrl+V'">Ctrl+V</kbd></p>
     </div>
     <label class="gh-btn gh-btn-accent text-sm cursor-pointer pointer-events-auto">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
@@ -312,9 +312,9 @@
       <div class="mb-3">
         <span class="panel-label">Shortcuts</span>
         <div class="text-xs text-gh-muted space-y-1">
-          <div class="flex justify-between"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
-          <div class="flex justify-between"><span>Redo</span><kbd>Ctrl+Shift+Z</kbd></div>
-          <div class="flex justify-between"><span>Export</span><kbd>Ctrl+S</kbd></div>
+          <div class="flex justify-between"><span>Undo</span><kbd x-text="isMac?'⌘Z':'Ctrl+Z'">Ctrl+Z</kbd></div>
+          <div class="flex justify-between"><span>Redo</span><kbd x-text="isMac?'⌘⇧Z':'Ctrl+Shift+Z'">Ctrl+Shift+Z</kbd></div>
+          <div class="flex justify-between"><span>Export</span><kbd x-text="isMac?'⌘S':'Ctrl+S'">Ctrl+S</kbd></div>
           <div class="flex justify-between"><span>Select tool</span><kbd>V</kbd></div>
           <div class="flex justify-between"><span>Text tool</span><kbd>T</kbd></div>
           <div class="flex justify-between"><span>Delete selected</span><kbd>Del</kbd></div>
@@ -738,6 +738,15 @@ function memeEditor() {
     // Undo/Redo
     history: [],
     historyIdx: -1,
+
+    // Named constants
+    MAX_HISTORY:        30,
+    SAVE_DEBOUNCE_MS:   1200,
+    STICKER_HIT_PAD:    10,   // px extra around sticker bounding box for easier clicking
+    LABEL_HIT_MULTIPLIER: 1.5, // expand text label hit-area relative to font size
+
+    // Platform detection
+    isMac: typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
 
     get activeText() {
       return this.activeTextLayer === 'top' ? this.topText : this.bottomText;
@@ -1224,7 +1233,7 @@ function memeEditor() {
       for (let i = this.textLabels.length - 1; i >= 0; i--) {
         const lbl = this.textLabels[i];
         const lx = lbl.x, ly = lbl.y + imgOffsetY;
-        const half = (lbl.size / 2) * 1.5;
+        const half = (lbl.size / 2) * this.LABEL_HIT_MULTIPLIER;
         if (Math.abs(x - lx) < half && Math.abs(y - ly) < half) {
           this.selectedType = 'label';
           this.selectedIdx  = i;
@@ -1237,7 +1246,7 @@ function memeEditor() {
       for (let i = this.stickers.length - 1; i >= 0; i--) {
         const s = this.stickers[i];
         const sx = s.x, sy = s.y + imgOffsetY;
-        if (Math.abs(x - sx) < s.size / 2 + 10 && Math.abs(y - sy) < s.size / 2 + 10) {
+        if (Math.abs(x - sx) < s.size / 2 + this.STICKER_HIT_PAD && Math.abs(y - sy) < s.size / 2 + this.STICKER_HIT_PAD) {
           this.selectedType = 'sticker';
           this.selectedIdx  = i;
           this.drag = { active:true, startX:x-s.x, startY:y-(s.y+imgOffsetY), idx:i, type:'sticker' };
@@ -1378,7 +1387,7 @@ function memeEditor() {
       // Discard future history
       this.history = this.history.slice(0, this.historyIdx + 1);
       this.history.push(state);
-      if (this.history.length > 30) this.history.shift();
+      if (this.history.length > this.MAX_HISTORY) this.history.shift();
       else this.historyIdx++;
     },
 
@@ -1420,7 +1429,7 @@ function memeEditor() {
 
     debouncedSave() {
       clearTimeout(this._saveTimer);
-      this._saveTimer = setTimeout(() => this.saveToStorage(), 1200);
+      this._saveTimer = setTimeout(() => this.saveToStorage(), this.SAVE_DEBOUNCE_MS);
     },
 
     saveToStorage() {
